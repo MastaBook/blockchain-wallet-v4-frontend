@@ -2,11 +2,12 @@ import {
   CoinType,
   CrossBorderLimits,
   PaymentValue,
-  WalletAcountType,
+  WalletAccountType,
   WalletFiatType
 } from '@core/types'
 
 import * as AT from './actionTypes'
+import { ImportedBtcAddressList } from './types'
 
 export const initialized = (payload) => ({
   payload,
@@ -14,6 +15,48 @@ export const initialized = (payload) => ({
 })
 
 export const destroyed = () => ({ type: AT.SEND_BTC_DESTROYED })
+
+export const btcImportedFundsSweep = (importedAddress: string[]) => ({
+  payload: importedAddress,
+  type: AT.SEND_BTC_IMPORTED_FUNDS_SWEEP
+})
+
+export const btcImportedFundsSweepFailure = (payload) => ({
+  payload,
+  type: AT.SEND_BTC_IMPORTED_FUNDS_SWEEP_FAILURE
+})
+
+export const btcImportedFundsSweepLoading = () => ({
+  type: AT.SEND_BTC_IMPORTED_FUNDS_SWEEP_LOADING
+})
+
+export const btcImportedFundsSweepSuccess = (payload) => ({
+  payload,
+  type: AT.SEND_BTC_IMPORTED_FUNDS_SWEEP_SUCCESS
+})
+
+export const setImportFundsReceiveIndex = (index: number | null) => ({
+  payload: index,
+  type: AT.SET_IMPORT_FUNDS_RECEIVE_INDEX
+})
+
+export const btcImportedFundsSweepEffectiveBalance = () => ({
+  type: AT.SEND_BTC_IMPORTED_FUNDS_SWEEP_EFFECTIVE_BALANCE
+})
+
+export const btcImportedFundsSweepEffectiveBalanceLoading = () => ({
+  type: AT.SEND_BTC_IMPORTED_FUNDS_SWEEP_EFFECTIVE_BALANCE_LOADING
+})
+
+export const btcImportedFundsSweepEffectiveBalanceSuccess = (payload: ImportedBtcAddressList) => ({
+  payload,
+  type: AT.SEND_BTC_IMPORTED_FUNDS_SWEEP_EFFECTIVE_BALANCE_SUCCESS
+})
+
+export const btcImportedFundsSweepEffectiveBalanceFailure = (error) => ({
+  payload: error,
+  type: AT.SEND_BTC_IMPORTED_FUNDS_SWEEP_EFFECTIVE_BALANCE_FAILURE
+})
 
 export const sendBtcPaymentUpdatedSuccess = (payment: PaymentValue) => ({
   payload: payment,
@@ -25,6 +68,22 @@ export const sendBtcPaymentUpdatedLoading = () => ({
 export const sendBtcPaymentUpdatedFailure = (err) => ({
   payload: err,
   type: AT.SEND_BTC_PAYMENT_UPDATED_FAILURE
+})
+
+export const clearSendBtcMaxCustodialWithdrawalFee = () => ({
+  type: AT.CLEAR_SEND_BTC_MAX_CUSTODIAL_WITHDRAWAL_FEE
+})
+
+export const sendBtcFetchMaxCustodialWithdrawalFeeSuccess = (fee: string) => ({
+  payload: fee,
+  type: AT.SEND_BTC_FETCH_MAX_CUSTODIAL_WITHDRAWAL_FEE_SUCCESS
+})
+export const sendBtcFetchMaxCustodialWithdrawalFeeLoading = () => ({
+  type: AT.SEND_BTC_FETCH_MAX_CUSTODIAL_WITHDRAWAL_FEE_LOADING
+})
+export const sendBtcFetchMaxCustodialWithdrawalFeeFailure = (err) => ({
+  payload: err,
+  type: AT.SEND_BTC_FETCH_MAX_CUSTODIAL_WITHDRAWAL_FEE_FAILURE
 })
 
 export const sendBtcFirstStepFeePerByteToggled = () => ({
@@ -73,9 +132,9 @@ export const sendBtcBitPayInvoiceExpired = () => ({
 
 export const sendBtcFetchLimits = (
   inputCurrency: CoinType,
-  fromAccount: WalletAcountType,
+  fromAccount: WalletAccountType,
   outputCurrency: CoinType,
-  toAccount: WalletAcountType,
+  toAccount: WalletAccountType,
   currency?: WalletFiatType
 ) => ({
   payload: {

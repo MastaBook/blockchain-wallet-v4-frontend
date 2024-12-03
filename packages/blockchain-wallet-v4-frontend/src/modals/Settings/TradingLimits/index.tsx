@@ -30,6 +30,7 @@ class TradingLimits extends PureComponent<Props, State> {
     // fetch user details to obtain most recent state
     this.props.profileActions.fetchUserDataLoading()
     this.props.profileActions.fetchUser()
+    this.props.custodialActions.fetchProductEligibilityForUser()
     this.props.fetchLimitsAndDetails()
   }
 
@@ -66,7 +67,13 @@ class TradingLimits extends PureComponent<Props, State> {
 }
 
 const mapDispatchToProps = (dispatch: Dispatch) => ({
+  analyticsActions: bindActionCreators(actions.analytics, dispatch),
+  custodialActions: bindActionCreators(actions.custodial, dispatch),
   fetchLimitsAndDetails: () => dispatch(actions.components.settings.fetchLimitsAndDetails()),
+  identityVerificationActions: bindActionCreators(
+    actions.components.identityVerification,
+    dispatch
+  ),
   modalActions: bindActionCreators(actions.modals, dispatch),
   profileActions: bindActionCreators(actions.modules.profile, dispatch)
 })
@@ -78,7 +85,7 @@ const mapStateToProps = (state: RootState) => ({
 const connector = connect(mapStateToProps, mapDispatchToProps)
 
 const enhance = compose(
-  ModalEnhancer(ModalName.TRADING_LIMITS_MODAL, { transition: duration }),
+  ModalEnhancer(ModalName.TRADING_LIMITS_MODAL, { fixed: true, transition: duration }),
   connector
 )
 

@@ -9,10 +9,12 @@ import { DefaultTheme } from 'styled-components'
 import { IcoMoonType } from './src/Icons/Icomoon'
 import { ImageType } from './src/Images/Images'
 import { CoinType, WalletCurrencyType } from '@core/types'
+import { BannerType as BType } from './src/Banners'
 
 export type AllCoinsType = WalletCurrencyType | 'STX'
 export const Badge: FunctionComponent<any>
 export const Banner: FunctionComponent<any>
+export const BannerType: typeof BType
 export const Box: FunctionComponent<any>
 export const BlockchainLoader: FunctionComponent<{
   width?: string
@@ -29,6 +31,7 @@ export const Button: FunctionComponent<
       | 'empty'
       | 'empty-blue'
       | 'empty-red'
+      | 'empty-purple'
       | 'grey400'
       | 'green'
       | 'grey800'
@@ -82,9 +85,9 @@ export const ComponentDropdown: ComponentClass<{
   uppercase?: boolean
   width?: string
 }>
-
 export function Color(color: keyof DefaultTheme): DefaultTheme[keyof DefaultTheme]
-
+export function isKnownColor(color: keyof DefaultTheme): boolean
+export const DateInput: FunctionComponent<{}>
 export const FontGlobalStyles: FunctionComponent<{}>
 export const FlatLoader: FunctionComponent<{
   width?: string
@@ -107,8 +110,9 @@ export const Icon: FunctionComponent<{
   onClick?: () => void
   role?: 'button'
 }>
+export const ActiveRewardsIcon: FunctionComponent<{ coin: string }>
 export const CoinAccountIcon: FunctionComponent<{
-  accountType: SwapBaseCounterTypes | 'EXCHANGE' | 'INTEREST'
+  accountType: 'CUSTODIAL' | 'EXCHANGE' | 'INTEREST' | 'STAKING' | 'ACCOUNT' | 'ACTIVE'
   coin: AllCoinsType
   style?: CSSProperties
 }>
@@ -188,6 +192,7 @@ export const Modal: FunctionComponent<{
   isLast?: boolean
   dataE2e?: string
   style?: CSSProperties
+  doNotHide?: boolean
 }>
 export const ModalBody: FunctionComponent<{
   loading?: boolean
@@ -217,7 +222,9 @@ export const SpinningLoader: FunctionComponent<{
   height?: string
   borderWidth?: string
 }>
-export const TabMenu: FunctionComponent<{}>
+export const TabMenu: FunctionComponent<{
+  style?: CSSProperties
+}>
 export const TabMenuItem: FunctionComponent<{
   activeClassName?: string
   role?: string
@@ -256,15 +263,27 @@ export const TextGroup: FunctionComponent<{
   inline?: boolean
   style?: CSSProperties
 }>
+enum ToastNatureType {
+  ERROR = 'error',
+  INFO = 'info',
+  SUCCESS = 'success',
+  WARN = 'warn'
+}
 export const Toast: FunctionComponent<{
-  nature?: 'success' | 'error' | 'warn'
+  children: ReactNode
   coin?: CoinType
-  onClose?: () => void
+  nature?: ToastNatureType
+  onClose: () => void
   persist?: boolean
   timeout?: number
 }>
-export const Tooltip: FunctionComponent<{ id: string; offset?: any, maxWidth?: string, place?: 'top' | 'right' | 'bottom' | 'left' }>
-export const TooltipHost: FunctionComponent<{ id: string }>
+export const Tooltip: FunctionComponent<{
+  id: string
+  offset?: any
+  maxWidth?: string
+  place?: 'top' | 'right' | 'bottom' | 'left'
+}>
+export const TooltipHost: FunctionComponent<{ id: string; value?: string }>
 export const TooltipIcon: FunctionComponent<{
   color?: keyof DefaultTheme
   name: keyof IcoMoonType | AllCoinsType
@@ -276,4 +295,16 @@ export const CheckBoxInput: FunctionComponent<{
   disabled?: boolean
   onClick?: () => void
   onChange?: () => void
+}>
+export const SelectInput: FunctionComponent<{
+  disabled?: boolean
+  elements?: Array<any>
+  grouped?: boolean
+  label?: string | unknown
+  onBlur?: () => void
+  onChange?: (unknown) => void
+  onFocus?: () => void
+  opened?: boolean
+  searchEnabled?: boolean
+  value: string | boolean | number
 }>

@@ -18,7 +18,6 @@ const Color = (color: string, theme: string) => {
       return Invert[color]
     case 'darkmode':
       return DarkMode[color]
-
     default:
       return Default[color]
   }
@@ -41,4 +40,7 @@ const Palette = (theme: string): DefaultTheme => {
   }
 }
 
-export { Color, Palette }
+const isKnownColor = (color: string): boolean =>
+  !!(Default[color] || Complement[color] || Grayscale[color] || Invert[color] || DarkMode[color])
+
+export { Color, isKnownColor, Palette }

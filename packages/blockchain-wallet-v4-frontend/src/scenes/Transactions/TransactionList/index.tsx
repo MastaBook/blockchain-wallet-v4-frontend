@@ -1,6 +1,7 @@
 import React, { PureComponent } from 'react'
 import styled from 'styled-components'
 
+import { IngestedSelfCustodyType } from '@core/network/api/coin/types'
 import {
   BSOrderType,
   BSTransactionType,
@@ -16,6 +17,7 @@ import DataError from 'components/DataError'
 import BuySellListItem from '../BSOrderTx'
 import CustodialTxListItem from '../CustodialTx'
 import NonCustodialTxListItem from '../NonCustodialTx'
+import SelfCustodyTx from '../SelfCustodyTx'
 import SwapOrderTx from '../SwapOrderTx'
 import Loading from './template.loading'
 
@@ -33,16 +35,23 @@ const TransactionsWrapper = styled.div`
 class TransactionList extends PureComponent<Props> {
   render() {
     const { coin, coinTicker, currency, data } = this.props
-
     return data.cata({
       Failure: (message) => <DataError onClick={this.props.onRefresh} message={message} />,
-      Loading: () => <Loading />,
-      NotAsked: () => <Loading />,
+      Loading: () => (
+        <TransactionsWrapper>
+          <Loading />
+        </TransactionsWrapper>
+      ),
+      NotAsked: () => (
+        <TransactionsWrapper>
+          <Loading />
+        </TransactionsWrapper>
+      ),
       Success: (transactions: SuccessStateType) => (
         <TransactionsWrapper>
           {transactions.map((tx) => {
             // @ts-ignore
-            return 'hash' in tx ? (
+            return 'processingErrorType' in tx ? null : 'hash' in tx ? (
               <NonCustodialTxListItem
                 key={tx.hash}
                 transaction={tx}
@@ -55,11 +64,14 @@ class TransactionList extends PureComponent<Props> {
               <SwapOrderTx key={tx.id} order={tx} coin={coin as CoinType} />
             ) : 'pair' in tx ? (
               <BuySellListItem key={tx.id} order={tx} />
+            ) : 'movements' in tx ? (
+              <SelfCustodyTx key={tx.txId} tx={tx} />
             ) : (
               <CustodialTxListItem
                 key={tx.id}
                 tx={tx as FiatBSAndSwapTransactionType}
-                {...this.props}
+                coin={coin}
+                currency={currency}
               />
             )
           })}
@@ -80,6 +92,8 @@ export type Props = {
   sourceType?: string
 }
 
-export type SuccessStateType = Array<BSOrderType | BSTransactionType | ProcessedTxType>
+export type SuccessStateType = Array<
+  BSOrderType | BSTransactionType | ProcessedTxType | IngestedSelfCustodyType
+>
 
 export default TransactionList

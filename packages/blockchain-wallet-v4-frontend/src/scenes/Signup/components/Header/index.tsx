@@ -16,6 +16,7 @@ const Column = styled.div`
   display: flex;
   align-items: center;
   flex-direction: column;
+  text-align: center;
 
   ${media.tabletL`
     align-items: flex-start;
@@ -30,6 +31,7 @@ const HeaderText = styled(Text)`
 const SubHeader = styled(Text)`
   margin-top: 1.25rem;
   font-size: 24px;
+  text-align: center;
 
   ${media.tabletL`
     font-size: 20px;
@@ -41,14 +43,15 @@ const Header = () => (
     <Column>
       <HeaderText color='whiteFade900' weight={700} data-e2e='signupSecureHeader'>
         <FormattedMessage
-          id='scenes.register.securelybuy'
-          defaultMessage='Securely Buy, Sell, and Store Crypto.'
+          id='scenes.register.sendreceiveearn'
+          defaultMessage='Send, receive and get up to 14% profit with your cryptos.'
         />
       </HeaderText>
+
       <SubHeader color='whiteFade800' weight={500} data-e2e='signupSecureSubHeader'>
         <FormattedMessage
-          id='scenes.register.getstarted'
-          defaultMessage='Get Started by Signing Up Now.'
+          id='scenes.register.getstartedandverify'
+          defaultMessage='Get Started by Signing Up and verify your profile.'
         />
       </SubHeader>
     </Column>

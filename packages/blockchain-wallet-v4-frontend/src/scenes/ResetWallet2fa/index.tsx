@@ -7,12 +7,23 @@ import { Field, InjectedFormProps, reduxForm } from 'redux-form'
 import styled from 'styled-components'
 
 import { RemoteDataType } from '@core/remote/types'
-import { Button, Link, SpinningLoader, Text, TextGroup } from 'blockchain-info-components'
-import { Form, FormGroup, FormItem, FormLabel, TextBox } from 'components/Form'
+import { Button, Icon, Link, SpinningLoader, Text, TextGroup } from 'blockchain-info-components'
+import Form from 'components/Form/Form'
+import FormGroup from 'components/Form/FormGroup'
+import FormItem from 'components/Form/FormItem'
+import FormLabel from 'components/Form/FormLabel'
+import TextBox from 'components/Form/TextBox'
 import { Wrapper } from 'components/Public'
 import { actions, selectors } from 'data'
 import { required, validEmail, validWalletId } from 'services/forms'
+import { media } from 'services/styles'
 
+const FormWrapper = styled(Wrapper)`
+  padding: 24px 32px 32px;
+  ${media.mobile`
+  padding: 16px;
+`}
+`
 const Header = styled.div`
   display: flex;
   justify-content: space-between;
@@ -31,9 +42,6 @@ const Footer = styled(FormGroup)`
   justify-content: space-between;
   align-items: center;
 `
-const GoBackLink = styled(LinkContainer)`
-  margin-right: 15px;
-`
 const LoadingWrapper = styled.div`
   display: flex;
   align-items: center;
@@ -41,67 +49,48 @@ const LoadingWrapper = styled.div`
   min-height: 350px;
 `
 
+const BackArrow = styled.div`
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  margin-bottom: 20px;
+`
+
 const validNullableEmail = (emailVal) => {
   return emailVal && emailVal.length ? validEmail(emailVal) : undefined
 }
 
-class ResetWallet2fa extends React.PureComponent<InjectedFormProps<{}, Props> & Props, StateProps> {
-  constructor(props) {
-    super(props)
-    this.state = {
-      captchaToken: undefined
-    }
-  }
-
-  componentDidMount() {
-    this.initCaptcha()
-  }
-
+class ResetWallet2fa extends React.PureComponent<InjectedFormProps<{}, Props> & Props> {
   componentWillUnmount() {
     this.props.actions.resetForm()
-  }
-
-  initCaptcha = (callback?) => {
-    /* eslint-disable */
-    // @ts-ignore
-    if (!window.grecaptcha || !window.grecaptcha.enterprise) return
-    // @ts-ignore
-    window.grecaptcha.enterprise.ready(() => {
-      // @ts-ignore
-      window.grecaptcha.enterprise.execute(window.CAPTCHA_KEY, {
-        action: 'RESET_2FA',
-      })
-        .then((captchaToken) => {
-          console.log('Captcha success')
-          this.setState({ captchaToken })
-          callback && callback(captchaToken)
-        })
-        .catch((e) => {
-          console.error('Captcha error: ', e)
-        })
-    })
-    /* eslint-enable */
   }
 
   onSubmit = (e) => {
     e.preventDefault()
 
-    // sometimes captcha doesnt mount correctly (race condition?)
-    // if it's undefined, try to re-init for token
-    if (!this.state.captchaToken) {
-      return this.initCaptcha((captchaToken) => {
-        this.props.actions.resetWallet2fa(captchaToken, this.props.formValues)
-      })
-    }
-
-    this.props.actions.resetWallet2fa(this.state.captchaToken, this.props.formValues)
+    this.props.actions.resetWallet2fa(this.props.formValues)
   }
 
   render() {
     const { invalid, resetWallet2faR } = this.props
 
     return (
-      <Wrapper>
+      <FormWrapper>
+        <LinkContainer to='/help'>
+          <BackArrow>
+            <Icon
+              data-e2e='resetBack'
+              name='arrow-back'
+              size='24px'
+              color='blue600'
+              style={{ marginRight: '4px' }}
+              role='button'
+            />
+            <Text color='grey900' size='14px' weight={500} lineHeight='1.5'>
+              <FormattedMessage id='copy.back' defaultMessage='Back' />
+            </Text>
+          </BackArrow>
+        </LinkContainer>
         <Header>
           <Text size='20px' color='blue900' weight={600} capitalize>
             <FormattedMessage id='scenes.reset2fa.firststep.reset' defaultMessage='Reset 2FA' />
@@ -141,8 +130,8 @@ class ResetWallet2fa extends React.PureComponent<InjectedFormProps<{}, Props> & 
               <TextGroup>
                 <Text size='13px' weight={400}>
                   <FormattedMessage
-                    id='scenes.reset2fa.firststep.explain'
-                    defaultMessage='Fill out the form below to regain access to your wallet by resetting your 2FA, restricted IP, and verified email.'
+                    id='scenes.reset2fa.firststep.explanation'
+                    defaultMessage='Fill out the form below to regain access to your Blockchain.com Account by resetting your 2FA or restricted IP.'
                   />
                 </Text>
                 <Text size='13px' weight={400}>
@@ -203,45 +192,20 @@ class ResetWallet2fa extends React.PureComponent<InjectedFormProps<{}, Props> & 
                     />
                     <Text size='12px' weight={400}>
                       <FormattedMessage
-                        id='scenes.reset2fa.firststep.firststepform.emailexplain'
-                        defaultMessage="Enter the email associated with your wallet (even if you've lost access to it)."
+                        id='scenes.reset2fa.firststep.firststepform.emailexplanation'
+                        defaultMessage='Enter the email associated with your wallet.'
                       />
                     </Text>
                   </FormItem>
                 </FormGroup>
-                <FormGroup>
-                  <FormItem>
-                    <FormLabel htmlFor='newEmail'>
-                      <FormattedMessage
-                        id='scenes.reset2fa.firststep.newEmail'
-                        defaultMessage='New Email (Optional)'
-                      />
-                    </FormLabel>
-                    <Field
-                      bgColor='grey000'
-                      name='newEmail'
-                      validate={[validNullableEmail]}
-                      component={TextBox}
-                    />
-                    <InfoMsg size='12px' weight={400}>
-                      <FormattedMessage
-                        id='scenes.reset2fa.firststep.newEmailExplain'
-                        defaultMessage="Enter your updated email if you've lost access to your previously verified email. If your 2FA reset request is approved, this will automatically be set as your wallet's new email address."
-                      />
-                    </InfoMsg>
-                  </FormItem>
-                </FormGroup>
+
                 <Footer>
-                  <GoBackLink to='/help'>
-                    <Button data-e2e='reset2faBack' nature='empty-blue'>
-                      <FormattedMessage id='buttons.go_back' defaultMessage='Go Back' />
-                    </Button>
-                  </GoBackLink>
                   <Button
                     data-e2e='2faResetContinue'
                     type='submit'
                     nature='primary'
                     disabled={invalid}
+                    fullwidth
                   >
                     <FormattedMessage id='buttons.continue' defaultMessage='Continue' />
                   </Button>
@@ -289,7 +253,7 @@ class ResetWallet2fa extends React.PureComponent<InjectedFormProps<{}, Props> & 
             </>
           )
         })}
-      </Wrapper>
+      </FormWrapper>
     )
   }
 }
@@ -311,10 +275,6 @@ type LinkStatePropsType = {
     newEmail?: string
   }
   resetWallet2faR: RemoteDataType<string, null>
-}
-
-type StateProps = {
-  captchaToken?: string
 }
 
 type Props = LinkStatePropsType

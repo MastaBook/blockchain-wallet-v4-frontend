@@ -42,14 +42,21 @@ export const coinToString = ({
 
 export const fiatToString = ({
   digits = 2,
+  showNarrowSymbol = false, // used to show $ instead of US$
   unit,
   value
 }: {
   digits?: number
+  showNarrowSymbol?: boolean
   unit: FiatType
   value: string | number
 }): string => {
-  const options = { currency: unit, minimumFractionDigits: digits, style: 'currency' }
+  const options = {
+    currency: unit,
+    currencyDisplay: showNarrowSymbol ? 'narrowSymbol' : undefined,
+    minimumFractionDigits: digits,
+    style: 'currency'
+  }
 
   return new Intl.NumberFormat(getLang(), options).format(new BigNumber(value).toNumber())
 }

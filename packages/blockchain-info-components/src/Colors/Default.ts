@@ -87,8 +87,9 @@ const Default = {
   teal700: '#055E66',
   teal800: '#08474C',
   teal900: '#052F33',
-  // COINS
+  // OLD - AVOID USE \\
   AAVE: '#2EBAC6',
+  ADA: '#000000',
   ALGO: '#000000',
   BAT: '#FF4724',
   BCH: '#8DC351',
@@ -110,6 +111,7 @@ const Default = {
   NEAR: '#000000',
   OGN: '#1A82FF',
   PAX: '#00522C',
+  SOL: '#000000',
   SNX: '#00D1FF',
   STX: '#211F6D',
   SUSHI: '#FA52A0',
@@ -125,13 +127,11 @@ const Default = {
   YFI: '#0074FA',
   ZEN: '#041742',
   ZRX: '#000000',
-  // FIAT
   USD: '#00B26B',
   EUR: '#00B26B',
   GBP: '#00B26B',
   RUB: '#00B26B',
   TRY: '#00B26B',
-  // OLD - AVOID USE \\
   // Brand
   'brand-yellow': '#FFB266',
   'brand-yellow-lighter': '#FFE6CC',
@@ -141,6 +141,7 @@ const Default = {
   'logo-quaternary': '#B2D5E5',
   'logo-quinary': '#10ADE4',
   // EXCHANGE
+  exchangeLogin: '#0E121B',
   exchangeNight: '#0A0D10',
   exchangeTurquoise: '#42F1B8',
   // Action
@@ -167,7 +168,9 @@ const Default = {
   // Blues
   purple: '#4C18BA',
   // Service Announcements
-  info: '#4A90E2'
+  info: '#4A90E2',
+  ultraLight: '#FAFBFF',
+  alertsNegative: '#F00699'
 }
 
 export type IDefaultTheme = typeof Default

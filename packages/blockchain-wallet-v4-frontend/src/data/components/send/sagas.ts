@@ -1,4 +1,4 @@
-import moment from 'moment'
+import { intervalToDuration } from 'date-fns'
 import { FormAction } from 'redux-form'
 import { call, CallEffect, delay, put, select } from 'redux-saga/effects'
 
@@ -31,7 +31,8 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
   const buildAndPublishPayment = function* (
     coin: string,
     payment: PaymentType,
-    destination: string
+    destination: string,
+    hotwalletAddress?: string
   ): Generator<PaymentType | CallEffect, PaymentValue, any> {
     // eslint-disable-next-line no-useless-catch
     try {
@@ -45,6 +46,10 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
         payment = yield payment.memoType('text')
         // @ts-ignore
         payment = yield payment.setDestinationAccountExists(true)
+      } else if (hotwalletAddress && payment.coin === 'ETH') {
+        // @ts-ignore
+        payment = yield payment.depositAddress(destination)
+        payment = yield payment.to(hotwalletAddress)
       } else {
         payment = yield payment.to(destination, 'CUSTODIAL')
       }
@@ -190,7 +195,7 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
           WITHDRAW_LOCK_DEFAULT_DAYS
         ) || WITHDRAW_LOCK_DEFAULT_DAYS
       const days =
-        typeof rule === 'object' ? moment.duration(rule.lockTime, 'seconds').days() : rule
+        typeof rule === 'object' ? intervalToDuration({ end: rule.lockTime, start: 0 }).days : rule
       yield put(
         actions.alerts.displayError(C.LOCKED_WITHDRAW_ERROR, {
           days

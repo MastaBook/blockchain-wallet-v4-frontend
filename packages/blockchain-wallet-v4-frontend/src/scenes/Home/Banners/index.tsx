@@ -1,121 +1,87 @@
-import React, { memo } from 'react'
+import React, { memo, useEffect } from 'react'
 import { connect, ConnectedProps } from 'react-redux'
 import { bindActionCreators, Dispatch } from 'redux'
 import styled from 'styled-components'
 
-import { actions, selectors } from 'data'
-import { RootState } from 'data/rootReducer'
-import { UserDataType } from 'data/types'
+import { actions } from 'data'
+import { useRemote } from 'hooks'
 
+import ActiveRewardsBanner from './ActiveRewardsBanner'
+import { AppleAndGooglePayBanner } from './AppleAndGooglePayBanner'
 import BSOrderBanner from './BSOrderBanner'
 import BuyCrypto from './BuyCrypto'
-import CeloEURRewards from './CeloEURRewards'
 import CoinRename from './CoinRename'
+import CompleteYourProfile from './CompleteYourProfile'
 import ContinueToGold from './ContinueToGold'
 import FinishKyc from './FinishKyc'
 import KycResubmit from './KycResubmit'
 import NewCurrency from './NewCurrency'
 import RecurringBuys from './RecurringBuys'
+import RewardsBanner from './RewardsBanner'
+import Sanctions from './Sanctions'
 import { getData } from './selectors'
 import ServicePriceUnavailable from './ServicePriceUnavailable'
+import SofiFinishMigrationBanner from './SofiFinishMigrationBanner'
+import SofiMigration from './SofiMigrationBanner'
+import StakingBanner from './StakingBanner'
 
 const BannerWrapper = styled.div`
   margin-bottom: 25px;
 `
 
-class Banners extends React.PureComponent<Props> {
-  componentDidMount() {
-    this.props.buySellActions.fetchOrders()
-    this.props.buySellActions.fetchSDDEligibility()
-    if (this.props.userData.tiers?.current > 0) {
-      // TODO move this away from BS
-      this.props.buySellActions.fetchLimits(this.props.fiatCurrency)
-    }
-  }
-
-  render() {
-    const { bannerToShow } = this.props.data
-
-    switch (bannerToShow) {
-      case 'resubmit':
-        return (
-          <BannerWrapper>
-            <KycResubmit />
-          </BannerWrapper>
-        )
-      case 'finishKyc':
-        return (
-          <BannerWrapper>
-            <FinishKyc />
-          </BannerWrapper>
-        )
-      case 'servicePriceUnavailable':
-        return (
-          <BannerWrapper>
-            <ServicePriceUnavailable />
-          </BannerWrapper>
-        )
-      case 'sbOrder':
-        return (
-          <BannerWrapper>
-            <BSOrderBanner />
-          </BannerWrapper>
-        )
-      case 'coinRename':
-        return (
-          <BannerWrapper>
-            <CoinRename />
-          </BannerWrapper>
-        )
-      case 'newCurrency':
-        return (
-          <BannerWrapper>
-            <NewCurrency />
-          </BannerWrapper>
-        )
-      case 'buyCrypto':
-        return (
-          <BannerWrapper>
-            <BuyCrypto />
-          </BannerWrapper>
-        )
-      case 'continueToGold':
-        return (
-          <BannerWrapper>
-            <ContinueToGold />
-          </BannerWrapper>
-        )
-      case 'celoEURRewards':
-        return (
-          <BannerWrapper>
-            <CeloEURRewards />
-          </BannerWrapper>
-        )
-      case 'recurringBuys':
-        return (
-          <BannerWrapper>
-            <RecurringBuys />
-          </BannerWrapper>
-        )
-      default:
-        return null
-    }
-  }
+const BANNER_DICT = {
+  activeRewards: <ActiveRewardsBanner />,
+  appleAndGooglePay: <AppleAndGooglePayBanner />,
+  buyCrypto: <BuyCrypto />,
+  coinRename: <CoinRename />,
+  completeYourProfile: <CompleteYourProfile />,
+  continueToGold: <ContinueToGold />,
+  earnRewards: <RewardsBanner />,
+  finishKyc: <FinishKyc />,
+  newCurrency: <NewCurrency />,
+  recurringBuys: <RecurringBuys />,
+  resubmit: <KycResubmit />,
+  sanctions: <Sanctions />,
+  sbOrder: <BSOrderBanner />,
+  servicePriceUnavailable: <ServicePriceUnavailable />,
+  sofiFinishMigration: <SofiFinishMigrationBanner />,
+  sofiMigration: <SofiMigration />,
+  staking: <StakingBanner />
 }
 
-const mapStateToProps = (state: RootState) => ({
-  data: getData(state),
-  fiatCurrency: selectors.core.settings.getCurrency(state).getOrElse('USD'),
-  userData: selectors.modules.profile.getUserData(state).getOrElse({
-    tiers: { current: 0 }
-  } as UserDataType)
-})
+const Banners = (props: Props) => {
+  const { buySellActions, interestActions } = props
+  const { data, hasError, isLoading, isNotAsked } = useRemote(getData)
+
+  useEffect(() => {
+    interestActions.fetchInterestEligible()
+    interestActions.fetchStakingEligible()
+    interestActions.fetchActiveRewardsEligible()
+    if (data && data.userData.tiers?.current > 0) {
+      // we need such to distinguish is profile completed
+      buySellActions.fetchCards(false)
+      buySellActions.fetchPaymentMethods(data.fiatCurrency)
+      buySellActions.fetchBalance({ skipLoading: true })
+      // TODO move this away from BS
+      buySellActions.fetchLimits({ currency: data.fiatCurrency })
+    }
+  }, [])
+
+  if (!data || hasError || isNotAsked || isLoading) return null
+
+  const { bannerToShow } = data
+
+  if (!bannerToShow) return null
+
+  return <BannerWrapper>{BANNER_DICT[bannerToShow]}</BannerWrapper>
+}
 
 const mapDispatchToProps = (dispatch: Dispatch) => ({
-  buySellActions: bindActionCreators(actions.components.buySell, dispatch)
+  buySellActions: bindActionCreators(actions.components.buySell, dispatch),
+  interestActions: bindActionCreators(actions.components.interest, dispatch)
 })
 
-const connector = connect(mapStateToProps, mapDispatchToProps)
+const connector = connect(null, mapDispatchToProps)
 
 type Props = ConnectedProps<typeof connector>
 

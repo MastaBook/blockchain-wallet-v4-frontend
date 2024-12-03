@@ -3,21 +3,22 @@ import { actions as brokerage } from './brokerage/slice'
 import * as btcTransactions from './btcTransactions/actions'
 import { actions as buySell } from './buySell/slice'
 import * as coinTransactions from './coinTransactions/actions'
+import { actions as debitCard } from './debitCard/slice'
+import { actions as dex } from './dex/slice'
 import * as ethTransactions from './ethTransactions/actions'
 import * as fiatTransactions from './fiatTransactions/actions'
 import * as fundRecovery from './fundRecovery/actions'
-import * as identityVerification from './identityVerification/actions'
+import { actions as identityVerification } from './identityVerification/slice'
 import * as importBtcAddress from './importBtcAddress/actions'
 import { actions as interest } from './interest/slice'
 import { actions as interestUploadDocument } from './interestUploadDocument/slice'
-import { actions as layoutWallet } from './layoutWallet/slice'
-import * as lockbox from './lockbox/actions'
 import * as manageAddresses from './manageAddresses/actions'
 import { actions as nfts } from './nfts/slice'
 import * as onboarding from './onboarding/actions'
 import { actions as priceChart } from './priceChart/slice'
 import * as recoveryPhrase from './recoveryPhrase/actions'
 import { actions as recurringBuy } from './recurringBuy/slice'
+import { actions as referral } from './referral/slice'
 import * as refresh from './refresh/actions'
 import * as request from './request/actions'
 import * as resetWallet2fa from './resetWallet2fa/actions'
@@ -30,10 +31,11 @@ import * as sendXlm from './sendXlm/actions'
 import { actions as settings } from './settings/slice'
 import * as signMessage from './signMessage/actions'
 import { actions as swap } from './swap/slice'
-import * as uploadDocuments from './uploadDocuments/actions'
+import { actions as taxCenter } from './taxCenter/slice'
+import { actions as termsAndConditions } from './termsAndConditions/slice'
+import { actions as uploadDocuments } from './uploadDocuments/slice'
 import * as veriff from './veriff/actions'
-import { actions as walletConnect } from './walletConnect/slice'
-import * as withdraw from './withdraw/actions'
+import { actions as withdraw } from './withdraw/slice'
 import * as xlmTransactions from './xlmTransactions/actions'
 
 export {
@@ -42,6 +44,8 @@ export {
   btcTransactions,
   buySell,
   coinTransactions,
+  debitCard,
+  dex,
   ethTransactions,
   fiatTransactions,
   fundRecovery,
@@ -49,14 +53,13 @@ export {
   importBtcAddress,
   interest,
   interestUploadDocument,
-  layoutWallet,
-  lockbox,
   manageAddresses,
   nfts,
   onboarding,
   priceChart,
   recoveryPhrase,
   recurringBuy,
+  referral,
   refresh,
   request,
   resetWallet2fa,
@@ -69,9 +72,10 @@ export {
   settings,
   signMessage,
   swap,
+  taxCenter,
+  termsAndConditions,
   uploadDocuments,
   veriff,
-  walletConnect,
   withdraw,
   xlmTransactions
 }

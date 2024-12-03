@@ -3,14 +3,13 @@ import { concat, curry, filter, has, map, reduce, sequence } from 'ramda'
 
 import { Exchange, Remote } from '@core'
 import { ADDRESS_TYPES } from '@core/redux/payment/btc/utils'
-import { InterestAccountBalanceType } from '@core/types'
+import { EarnAccountBalanceResponseType } from '@core/types'
 import { selectors } from 'data'
 
 export const getData = (
   state,
   ownProps: {
     exclude?: Array<string>
-    excludeLockbox?: boolean
     forceCustodialFirst?: boolean
     includeCustodial?: boolean
     includeExchangeAddress?: boolean
@@ -19,7 +18,6 @@ export const getData = (
 ) => {
   const {
     exclude = [],
-    excludeLockbox,
     includeExchangeAddress,
     includeCustodial,
     includeInterest,
@@ -30,7 +28,7 @@ export const getData = (
     if (has('balance', wallet)) {
       const xlmDisplay = Exchange.displayCoinToCoin({
         coin: 'XLM',
-        value: wallet.balnace
+        value: wallet.balance
       })
       return `${wallet.label} (${xlmDisplay})`
     }
@@ -45,7 +43,7 @@ export const getData = (
       })})`
     )
   }
-  const buildInterestDisplay = (account: InterestAccountBalanceType['XLM']) => {
+  const buildInterestDisplay = (account: EarnAccountBalanceResponseType['XLM']) => {
     return (
       `Rewards Account` +
       ` (${Exchange.displayCoinToCoin({
@@ -100,13 +98,6 @@ export const getData = (
       .map(excluded)
       .map(toDropdown)
       .map(toGroup('Wallet')),
-    excludeLockbox
-      ? Remote.of([])
-      : selectors.core.common.xlm
-          .getLockboxXlmBalances(state)
-          .map(excluded)
-          .map(toDropdown)
-          .map(toGroup('Lockbox')),
     showCustodial || showCustodialWithAddress
       ? selectors.components.buySell
           .getBSBalances(state)
@@ -119,13 +110,13 @@ export const getData = (
       : Remote.of([]),
     includeInterest
       ? selectors.components.interest
-          .getInterestAccountBalance(state)
+          .getPassiveRewardsAccountBalance(state)
           .map((x) => x.XLM)
           .map(toInterestDropdown)
           .map(toGroup('Rewards Account'))
       : Remote.of([])
-  ]).map(([b1, b2, b3, b4, b5]) => {
-    const orderArray = forceCustodialFirst ? [b2, b1, b3, b4, b5] : [b1, b2, b3, b4, b5]
+  ]).map(([b1, b2, b3, b4]) => {
+    const orderArray = forceCustodialFirst ? [b2, b1, b3, b4] : [b1, b2, b3, b4]
     // @ts-ignore
     const data = reduce(concat, [], orderArray)
     return { data }

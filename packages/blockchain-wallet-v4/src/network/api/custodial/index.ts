@@ -3,12 +3,14 @@ import {
   CoinType,
   CrossBorderLimits,
   FiatType,
-  WalletAcountType,
+  WalletAccountType,
   WalletFiatType
 } from '@core/types'
 import {
   BankTransferAccountType,
+  DepositTerms,
   NabuProductType,
+  ProductEligibilityForUser,
   ProductEligibilityResponse,
   WithdrawLimitsResponse
 } from 'data/types'
@@ -17,10 +19,15 @@ import { BSTransactionsType } from '../buySell/types'
 import {
   BeneficiariesType,
   BeneficiaryType,
+  CustodialToNonCustodialWithdrawalFeesResponseType,
+  CustodialToNonCustodialWithdrawalFeesType,
   CustodialTransferRequestType,
   GetTransactionsHistoryType,
+  MaxCustodialWithdrawalFeeType,
   NabuCustodialProductType,
+  NabuMoneyFloatType,
   PaymentDepositPendingResponseType,
+  ProductTypes,
   WithdrawalFeesProductType,
   WithdrawalLockCheckResponseType,
   WithdrawalLockResponseType,
@@ -28,7 +35,7 @@ import {
   WithdrawResponseType
 } from './types'
 
-export default ({ authorizedGet, authorizedPost, nabuUrl }) => {
+export default ({ authorizedGet, authorizedPost, authorizedPut, nabuUrl }) => {
   const getBeneficiaries = (): BeneficiariesType =>
     authorizedGet({
       endPoint: '/payments/beneficiaries',
@@ -64,6 +71,24 @@ export default ({ authorizedGet, authorizedPost, nabuUrl }) => {
       url: nabuUrl
     })
 
+  const getDepositTerms = (
+    amount: NabuMoneyFloatType,
+    paymentMethodId: string,
+    product = ProductTypes.WALLET,
+    purpose = ProductTypes.DEPOSIT
+  ): DepositTerms =>
+    authorizedPut({
+      contentType: 'application/json',
+      data: {
+        amount,
+        paymentMethodId,
+        product,
+        purpose
+      },
+      endPoint: '/payments/deposit/terms',
+      url: nabuUrl
+    })
+
   const withdrawFunds = (
     beneficiary: BeneficiaryType | BankTransferAccountType,
     currency: WalletFiatType,
@@ -93,6 +118,31 @@ export default ({ authorizedGet, authorizedPost, nabuUrl }) => {
         product
       },
       endPoint: `/payments/withdrawals/fees`,
+      url: nabuUrl
+    })
+
+  const getMaxCustodialWithdrawalFee = ({
+    currency,
+    fiatCurrency,
+    paymentMethod
+  }: MaxCustodialWithdrawalFeeType): CustodialToNonCustodialWithdrawalFeesResponseType =>
+    authorizedGet({
+      contentType: 'application/json',
+      endPoint: `/withdrawals/fees?product=WALLET&max=true&currency=${currency}&fiatCurrency=${fiatCurrency}&paymentMethod=${paymentMethod}`,
+      ignoreQueryParams: true,
+      url: nabuUrl
+    })
+
+  const getCustodialToNonCustodialWithdrawalFees = ({
+    amount,
+    currency,
+    fiatCurrency,
+    paymentMethod
+  }: CustodialToNonCustodialWithdrawalFeesType): CustodialToNonCustodialWithdrawalFeesResponseType =>
+    authorizedGet({
+      contentType: 'application/json',
+      endPoint: `/withdrawals/fees?product=WALLET&amount=${amount}&currency=${currency}&fiatCurrency=${fiatCurrency}&paymentMethod=${paymentMethod}`,
+      ignoreQueryParams: true,
       url: nabuUrl
     })
 
@@ -152,9 +202,9 @@ export default ({ authorizedGet, authorizedPost, nabuUrl }) => {
 
   const getCrossBorderTransactions = (
     inputCurrency: CoinType,
-    fromAccount: WalletAcountType,
+    fromAccount: WalletAccountType,
     outputCurrency: CoinType,
-    toAccount: WalletAcountType,
+    toAccount: WalletAccountType,
     currency?: WalletFiatType
   ): CrossBorderLimits =>
     authorizedGet({
@@ -169,18 +219,34 @@ export default ({ authorizedGet, authorizedPost, nabuUrl }) => {
       url: nabuUrl
     })
 
-  const getLimitsAndFeaturesDetails = () =>
+  const getLimitsAndFeaturesDetails = (tier?: string) =>
     authorizedGet({
+      data: {
+        tier
+      },
       endPoint: `/limits/overview`,
+      url: nabuUrl
+    })
+
+  const fetchProductEligibilityForUser = (): ProductEligibilityForUser =>
+    authorizedGet({
+      data: {
+        product: 'SIMPLEBUY'
+      },
+      endPoint: `/products`,
       url: nabuUrl
     })
 
   return {
     checkWithdrawalLocks,
+    fetchProductEligibilityForUser,
     getBeneficiaries,
     getCrossBorderTransactions,
+    getCustodialToNonCustodialWithdrawalFees,
+    getDepositTerms,
     getEligibilityForProduct,
     getLimitsAndFeaturesDetails,
+    getMaxCustodialWithdrawalFee,
     getTransactionsHistory,
     getWithdrawalFees,
     getWithdrawalLimits,

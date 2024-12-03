@@ -26,7 +26,7 @@ import {
 
 import { Exchange, Remote } from '@core'
 import { ADDRESS_TYPES } from '@core/redux/payment/btc/utils'
-import { InterestAccountBalanceType } from '@core/types'
+import { EarnAccountBalanceResponseType } from '@core/types'
 import { selectors } from 'data'
 import { collapse } from 'utils/helpers'
 
@@ -34,7 +34,7 @@ const allWallets = {
   label: 'All',
   options: [
     {
-      label: 'All BCH Private Key Wallets',
+      label: 'All BCH DeFi Wallets',
       value: 'all'
     }
   ]
@@ -57,7 +57,6 @@ export const getData = (
     exclude?: Array<string>
     excludeHDWallets?: boolean
     excludeImported?: boolean
-    excludeLockbox?: boolean
     forceCustodialFirst?: boolean
     includeAll?: boolean
     includeCustodial?: boolean
@@ -70,7 +69,6 @@ export const getData = (
     exclude = [],
     excludeHDWallets,
     excludeImported,
-    excludeLockbox,
     includeAll = true,
     includeExchangeAddress,
     includeCustodial,
@@ -100,7 +98,7 @@ export const getData = (
     )
   }
 
-  const buildInterestDisplay = (x: InterestAccountBalanceType['BCH']) => {
+  const buildInterestDisplay = (x: EarnAccountBalanceResponseType['BCH']) => {
     return (
       `Rewards Account` +
       ` (${Exchange.displayCoinToCoin({
@@ -209,7 +207,7 @@ export const getData = (
         : Remote.of([]),
       includeInterest
         ? selectors.components.interest
-            .getInterestAccountBalance(state)
+            .getPassiveRewardsAccountBalance(state)
             .map((x) => x.BCH)
             .map(toInterestDropdown)
             .map(toGroup('Rewards Account'))
@@ -229,18 +227,11 @@ export const getData = (
                 ),
                 x
               )
-            ),
-      excludeLockbox
-        ? Remote.of([])
-        : selectors.core.common.bch
-            .getLockboxBchBalances(state)
-            .map(excluded)
-            .map(toDropdown)
-            .map(toGroup('Lockbox'))
+            )
     ]).map(([b1, b2, b3, b4, b5]) => {
       const orderArray = forceCustodialFirst ? [b3, b1, b2, b4, b5] : [b1, b2, b3, b4, b5]
       // @ts-ignore
-      const data = reduce(concat, [], orderArray)
+      const data = reduce(concat, [], orderArray) as Array<unknown>
       if (includeAll) {
         return { data: prepend(allWallets, data) }
       }

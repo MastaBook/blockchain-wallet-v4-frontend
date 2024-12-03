@@ -1,7 +1,10 @@
 import { call, CallEffect, put, PutEffect, SelectEffect } from 'redux-saga/effects'
 
 import { APIType } from '@core/network/api'
+import { ExtraKYCContext } from '@core/types'
 import { errorHandler } from '@core/utils'
+import { VerifyIdentityOriginType } from 'data/types'
+import { getExtraKYCCompletedStatus } from 'services/sagas/extraKYC'
 
 import coinSagas from '../../coins/sagas'
 import profileSagas from '../../modules/profile/sagas'
@@ -12,8 +15,9 @@ import { generateKey } from './utils'
 
 export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; networks: any }) => {
   // const logLocation = 'components/request/sagas'
-  const { waitForUserData } = profileSagas({ api, coreSagas, networks })
+  const { isTier2, waitForUserData } = profileSagas({ api, coreSagas, networks })
   const { getNextReceiveAddressForCoin } = coinSagas({
+    api,
     coreSagas,
     networks
   })
@@ -41,7 +45,7 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
             account.coin
           )
           address = custodial.address
-          if (window.coins[account.coin].coinfig.type.isMemoBased) {
+          if (window.coins[account.coin].coinfig.type.isMemoBased && address.split(':')[1]) {
             // eslint-disable-next-line prefer-destructuring
             extras.Memo = address.split(':')[1]
             // eslint-disable-next-line prefer-destructuring
@@ -63,7 +67,20 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
     }
   }
 
+  const checkIsUserAllowedToProceedWithRequest = function* () {
+    const isUserTier2 = yield call(isTier2)
+    if (!isUserTier2) {
+      return
+    }
+    yield call(getExtraKYCCompletedStatus, {
+      api,
+      context: ExtraKYCContext.FIAT_DEPOSIT,
+      origin: 'Request' as VerifyIdentityOriginType
+    })
+  }
+
   return {
+    checkIsUserAllowedToProceedWithRequest,
     getNextAddress
   }
 }

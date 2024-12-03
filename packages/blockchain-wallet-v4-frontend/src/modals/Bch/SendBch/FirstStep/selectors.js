@@ -11,10 +11,13 @@ export const getData = (state) => {
 
   const paymentR = selectors.components.sendBch.getPayment(state)
   const sendLimits = selectors.components.sendBch.getSendLimits(state).getOrElse({})
-  const excludeLockbox = false
   const networkType = 'bitcoin'
   const isMnemonicVerified = selectors.core.wallet.isMnemonicVerified(state)
   const network = Bitcoin.networks[networkType]
+  const importedAddressSweepFeatureFlag = selectors.core.walletOptions
+    .getImportedAddressSweep(state)
+    .getOrElse(false)
+  const importedAddressSweepGetInfo = selectors.core.settings.getImportSweep(state).getOrElse(false)
 
   const transform = (payment) => {
     const minFeePerByte = path(['fees', 'limit', 'min'], payment)
@@ -26,8 +29,9 @@ export const getData = (state) => {
       amount,
       destination,
       effectiveBalance,
-      excludeLockbox,
       from,
+      importedAddressSweepFeatureFlag,
+      importedAddressSweepGetInfo,
       isMnemonicVerified,
       maxFeePerByte,
       minFeePerByte,

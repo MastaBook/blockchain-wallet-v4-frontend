@@ -1,10 +1,12 @@
 import React from 'react'
 import { FormattedMessage } from 'react-intl'
 import { AlertButton } from 'blockchain-wallet-v4-frontend/src/modals/components'
+import { change } from 'redux-form'
 
 import { fiatToString } from '@core/exchange/utils'
 import { CrossBorderLimits, FiatType } from '@core/types'
 import { Text } from 'blockchain-info-components'
+import { BROKERAGE_FORM } from 'data/components/brokerage/model'
 import { convertBaseToStandard } from 'data/components/exchange/services'
 import { BrokerageOrderType } from 'data/types'
 import { getEffectiveLimit, getEffectivePeriod } from 'services/custodial'
@@ -13,7 +15,8 @@ export const minMaxAmount = (
   limits: { max: string; min: string },
   orderType: BrokerageOrderType,
   fiatCurrency: FiatType,
-  amount: string
+  amount: string,
+  bankText: string
 ) => {
   const max = convertBaseToStandard('FIAT', limits.max)
   const min = convertBaseToStandard('FIAT', limits.min)
@@ -26,15 +29,24 @@ export const minMaxAmount = (
     value: min
   })
 
+  const formattedAmount = fiatToString({
+    unit: fiatCurrency,
+    value: amount
+  })
+
   // This handles the default case where we show "0" in the input field but
-  // it's just a placeholder and amount actuall equals '' in redux
+  // it's just a placeholder and amount actual equals '' in redux
   if (amount === '') return undefined
   // The min max logic
   if (Number(amount) > Number(max)) {
     return {
       amount: (
         <>
-          <AlertButton>
+          <AlertButton
+            onClick={() => {
+              change(BROKERAGE_FORM, 'amount', max)
+            }}
+          >
             {orderType === BrokerageOrderType.DEPOSIT ? (
               <FormattedMessage
                 id='copy.above_max'
@@ -70,6 +82,25 @@ export const minMaxAmount = (
               />
             </Text>
           )}
+
+          {orderType === BrokerageOrderType.DEPOSIT && (
+            <Text
+              size='14px'
+              color='textBlack'
+              weight={500}
+              style={{ marginTop: '24px', textAlign: 'center' }}
+            >
+              <FormattedMessage
+                id='modals.brokerage.deposit_limit'
+                defaultMessage='Looks like your {bank} only allows deposits up to {maxAmount} at at time. To deposit {enterAmount}, split your deposit into multiple transactions.'
+                values={{
+                  bank: bankText,
+                  enterAmount: formattedAmount,
+                  maxAmount: formattedMax
+                }}
+              />
+            </Text>
+          )}
         </>
       )
     }
@@ -78,7 +109,11 @@ export const minMaxAmount = (
     return {
       amount: (
         <>
-          <AlertButton>
+          <AlertButton
+            onClick={() => {
+              change(BROKERAGE_FORM, 'amount', min)
+            }}
+          >
             <FormattedMessage
               id='copy.below_min'
               defaultMessage='{amount} Minimum'
@@ -114,7 +149,7 @@ export const checkCrossBorderLimit = (
     return false
   }
 
-  const { value: availableAmount } = crossBorderLimits?.current?.available
+  const { value: availableAmount } = crossBorderLimits?.current?.available ?? {}
   const availableAmountInBase = convertBaseToStandard('FIAT', availableAmount)
 
   const showError = Number(amount) > Number(availableAmountInBase)
@@ -128,7 +163,11 @@ export const checkCrossBorderLimit = (
     return {
       amount: (
         <>
-          <AlertButton>
+          <AlertButton
+            onClick={() => {
+              change(BROKERAGE_FORM, 'amount', effectiveLimit?.limit.value.toString())
+            }}
+          >
             <FormattedMessage id='copy.over_your_limit' defaultMessage='Over Your Limit' />
           </AlertButton>
           <Text

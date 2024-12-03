@@ -1,4 +1,4 @@
-import BIP39 from 'bip39'
+import BIP39 from 'bip39-light'
 import * as Bitcoin from 'bitcoinjs-lib'
 import Base58 from 'bs58'
 import Either from 'data.either'
@@ -346,6 +346,18 @@ export const setAccountLabel = curry((accountIdx, label, wallet) => {
 export const setAccountArchived = curry((index, archived, wallet) => {
   const lens = compose(accounts, HDAccountList.account(index), HDAccount.archived)
   return set(lens, archived, wallet)
+})
+
+// setAccountDerivations :: Number -> Derivations -> Wallet -> Wallet
+export const setAccountDerivations = curry((index, derivations, wallet) => {
+  const lens = compose(accounts, HDAccountList.account(index), HDAccount.derivations)
+  return set(lens, derivations, wallet)
+})
+
+// setDefaultDerivation :: Number -> derivationType -> Wallet -> Wallet
+export const setDefaultDerivation = curry((index, derivationType, wallet) => {
+  const lens = compose(accounts, HDAccountList.account(index), HDAccount.defaultDerivation)
+  return set(lens, derivationType, wallet)
 })
 
 // setDefaultAccountIdx :: Number -> Wallet -> Wallet

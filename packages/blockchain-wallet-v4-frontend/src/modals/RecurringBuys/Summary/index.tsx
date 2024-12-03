@@ -1,14 +1,14 @@
 import React from 'react'
 import { FormattedMessage } from 'react-intl'
 import { connect, ConnectedProps } from 'react-redux'
-import moment from 'moment'
+import { intervalToDuration } from 'date-fns'
 import { bindActionCreators, Dispatch } from 'redux'
 import styled from 'styled-components'
 
 import { fiatToString } from '@core/exchange/utils'
 import { BSOrderType, FiatType, WithdrawalLockCheckRule } from '@core/types'
 import { Button, Icon, Text } from 'blockchain-info-components'
-import { FlyoutContainer, FlyoutContent, FlyoutFooter } from 'components/Flyout'
+import { FlyoutContainer, FlyoutContent, FlyoutFooter } from 'components/Flyout/Layout'
 import { getPeriodTitleText } from 'components/Flyout/model'
 import { actions, selectors } from 'data'
 import { getCounterAmount, getCounterCurrency } from 'data/components/buySell/model'
@@ -57,7 +57,7 @@ const Success = ({ modalActions, order, period, withdrawLockCheck }: Props) => {
     value: getCounterAmount(order)
   })
   const coin = order.outputCurrency
-  const days = moment.duration(withdrawLockCheck.lockTime, 'seconds').days()
+  const { days } = intervalToDuration({ end: withdrawLockCheck.lockTime, start: 0 })
   return (
     <FlyoutContainer>
       <FlyoutContent mode='middle'>
@@ -119,7 +119,7 @@ const Success = ({ modalActions, order, period, withdrawLockCheck }: Props) => {
 const mapStateToProps = (state: RootState) => ({
   bankAccounts: selectors.components.brokerage.getBankTransferAccounts(state).getOrElse([]),
   cards: selectors.components.buySell.getBSCards(state).getOrElse([]),
-  order: selectors.components.buySell.getBSOrder(state) as BSOrderType,
+  order: selectors.components.buySell.getBSOrder(state).getOrElse({} as BSOrderType),
   period: selectors.components.recurringBuy.getPeriod(state) as RecurringBuyPeriods,
   quote: selectors.components.buySell.getBSQuote(state).getOrFail('Could not get exchange rate'),
   withdrawLockCheck: selectors.components.send

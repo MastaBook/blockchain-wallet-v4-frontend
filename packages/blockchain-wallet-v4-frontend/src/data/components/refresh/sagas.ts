@@ -1,4 +1,4 @@
-import { contains, toUpper } from 'ramda'
+import { toUpper } from 'ramda'
 import { call, put, select } from 'redux-saga/effects'
 
 import { actions, selectors } from 'data'
@@ -34,6 +34,57 @@ export default () => {
     yield put(actions.core.data.coins.fetchCoinsRates())
   }
 
+  /** Refreshes the transactions based on the page the user is viewing */
+  const refreshAllTransactions = function* () {
+    const pathname = yield select(selectors.router.getPathname)
+    const maybeCoin = toUpper(pathname.split('/')[2] || '')
+
+    switch (true) {
+      case pathname.includes('coins/BCH'):
+        yield call(refreshBchTransactions)
+        break
+      case pathname.includes('coins/BTC'):
+        yield call(refreshBtcTransactions)
+        break
+      case pathname.includes('coins/ETH'):
+        yield call(refreshEthTransactions)
+        break
+      case pathname.includes('coins/XLM'):
+        yield call(refreshXlmTransactions)
+        break
+      case selectors.core.data.coins.getErc20Coins().includes(maybeCoin):
+        yield call(refreshErc20Transactions, pathname.split('/')[1])
+        break
+      case selectors.core.data.coins.getDynamicSelfCustodyCoins().includes(maybeCoin):
+      case selectors.core.data.coins.getCustodialCoins().includes(maybeCoin):
+        yield call(refreshCoinTransactions, maybeCoin)
+        break
+      case pathname.includes('coins/EUR'):
+        yield put(actions.core.data.fiat.fetchTransactions('EUR', true))
+        break
+      case pathname.includes('coins/GBP'):
+        yield put(actions.core.data.fiat.fetchTransactions('GBP', true))
+        break
+      case pathname.includes('coins/USD'):
+        yield put(actions.core.data.fiat.fetchTransactions('USD', true))
+        break
+      case pathname.includes('profile'):
+      case pathname.includes('/airdrops'):
+        yield put(actions.modules.profile.fetchUserDataLoading())
+        yield put(actions.modules.profile.fetchUser())
+        yield put(actions.modules.profile.fetchUserCampaigns())
+        break
+      case pathname.includes('/debit-card'):
+        yield put(actions.components.debitCard.getCurrentCardAccount())
+        yield put(actions.components.debitCard.getCardTransactions({ limit: 4 }))
+        break
+      case pathname.includes('/settings/general'):
+        yield put(actions.components.buySell.fetchCards(true))
+        break
+      default:
+    }
+  }
+
   const refreshClicked = function* () {
     try {
       // User
@@ -44,9 +95,17 @@ export default () => {
       yield put(actions.core.data.eth.fetchData())
       yield put(actions.core.data.xlm.fetchData())
       yield put(actions.core.data.eth.fetchErc20Data())
-      yield put(actions.components.interest.fetchInterestBalance())
+      yield put(actions.components.interest.fetchRewardsBalance())
+      yield put(actions.components.interest.fetchStakingBalance())
+      yield put(actions.components.interest.fetchActiveRewardsBalance())
       yield put(actions.components.buySell.fetchBalance({}))
       yield put(actions.components.buySell.fetchOrders())
+      yield put(actions.components.dex.fetchUserEligibility())
+      // TODO: SELF_CUSTODY, remove
+      const stxEligibility = selectors.coins.getStxSelfCustodyAvailability(yield select())
+      if (stxEligibility) {
+        yield put(actions.core.data.coins.fetchData())
+      }
       // Prices (new approach)
       yield put(actions.prices.fetchCoinPrices())
       // Rates
@@ -54,55 +113,7 @@ export default () => {
       // Custodial Swaps
       yield put(actions.custodial.fetchRecentSwapTxs())
 
-      const pathname = yield select(selectors.router.getPathname)
-      const maybeCoin = toUpper(pathname.split('/')[1])
-
-      switch (true) {
-        case contains('/bch/transactions', pathname):
-          yield call(refreshBchTransactions)
-          break
-        case contains('/btc/transactions', pathname):
-          yield call(refreshBtcTransactions)
-          break
-        case contains('/eth/transactions', pathname):
-          yield call(refreshEthTransactions)
-          break
-        case contains('/xlm/transactions', pathname):
-          yield call(refreshXlmTransactions)
-          break
-        case selectors.core.data.coins.getErc20Coins().includes(maybeCoin):
-          yield call(refreshErc20Transactions, pathname.split('/')[1])
-          break
-        case selectors.core.data.coins.getCustodialCoins().includes(maybeCoin):
-          yield call(refreshCoinTransactions, maybeCoin)
-          break
-        case contains('/eur/transactions', pathname):
-          yield put(actions.core.data.fiat.fetchTransactions('EUR', true))
-          break
-        case contains('/gbp/transactions', pathname):
-          yield put(actions.core.data.fiat.fetchTransactions('GBP', true))
-          break
-        case contains('/usd/transactions', pathname):
-          yield put(actions.core.data.fiat.fetchTransactions('USD', true))
-          break
-        case contains('/lockbox/', pathname):
-          yield put(actions.components.lockbox.initializeDashboard(pathname.split('/')[3]))
-          break
-        case contains('profile', pathname):
-        case contains('/airdrops', pathname):
-          yield put(actions.modules.profile.fetchUserDataLoading())
-          yield put(actions.modules.profile.fetchUser())
-          yield put(actions.modules.profile.fetchUserCampaigns())
-          break
-        case contains('/settings/general', pathname):
-          yield put(actions.components.buySell.fetchCards(true))
-          break
-        default:
-          yield put(actions.core.data.bch.fetchTransactions('', true))
-          yield put(actions.core.data.btc.fetchTransactions('', true))
-          yield put(actions.core.data.eth.fetchTransactions(null, true))
-          yield put(actions.core.data.xlm.fetchTransactions('', true))
-      }
+      yield refreshAllTransactions()
     } catch (e) {
       // eslint-disable-next-line
       console.log(e)
@@ -113,8 +124,7 @@ export default () => {
   }
 
   return {
-    refreshBchTransactions,
-    refreshBtcTransactions,
+    refreshAllTransactions,
     refreshClicked,
     refreshRates
   }

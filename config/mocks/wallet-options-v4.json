@@ -2,32 +2,93 @@
   "platforms": {
     "web": {
       "application": {
-        "analyticsSiteId": 2,
         "environment": "dev",
         "announcements": {
-          "lockbox": {},
           "public": {},
           "swap": {},
           "wallet": {}
         }
       },
       "coinListing": "",
-      "coinRename": "CLOUT",
+      "coinRename": "",
       "sift": {
         "apiKey": "0ecd212038"
       },
+      "hotWalletAddresses": {
+        "exchange": {
+          "eth": "0x95eFeFA0A4564BfABfBB1Ee08A359C062EB0A94b"
+        },
+        "lending": {
+          "eth": "0xBA0145434A0a53E58D10680254756F679c359463"
+        },
+        "rewards": {
+          "eth": "0x7d9d70c1A99FcC952d48b781947FAa0a3795083E"
+        },
+        "simplebuy": {
+          "eth": "0xFF202CBC6C794516164E45621143acDe4a3FEa24"
+        },
+        "staking": {
+          "eth": "0xC108cfAAaE961e6983cAA1955e514092aD06b93f"
+        },
+        "swap": {
+          "eth": "0xC05f893248D843192A989AEE6dC26d21426E78AF"
+        }
+      },
       "featureFlags": {
-        "addCheckoutPaymentProvider": false,
+        "accountRecoveryV2": true,
+        "activeRewardsPromoBanner": true,
+        "addCheckoutPaymentProvider": true,
+        "addPlaidPaymentProvider": true,
         "addStripePaymentProvider": false,
-        "cEURRewards": true,
+        "applePayPaymentMethod": true,
+        "appleAndGooglePayPromoBanner": true,
+        "availableToTradeWithdraw": true,
+        "createNabuUserAtLogin": false,
+        "coinViewV2": false,
+        "completeYourProfile": true,
+        "createExchangeUserOnSignupOrLogin": true,
         "developerMobilePairing": true,
+        "dex": true,
         "eddInterestFileUpload": true,
-        "pollForMagicLinkData": true,
+        "exchangeMobileDuplicateAccountRedirect": true,
+        "exchangePromo": true,
+        "flexiblePricingModel": true,
+        "googlePayPaymentMethod": true,
+        "institutionalPortal": true,
+        "isActiveRewardsEnabled": true,
+        "isActiveRewardsWithdrawalEnabled": true,
+        "isReferralEnabled": true,
+        "isReferralRetrievalEnabled": true,
+        "isStakingEnabled": true,
+        "isStakingWithdrawalEnabled": true,
+        "isSuperAppEnabled": true,
+        "isMnemonicRecoveryEnabled": true,
+        "mergeAndUpgrade": false,
+        "nftExplorer": true,
         "recurringBuys": true,
-        "signupCountry": true,
+        "rewardsFlowUnderSwapEnabled": true,
+        "rewardsPromoBanner": true,
+        "secureEmailSmsUpdate": false,
+        "showImportedAddressSweep": false,
+        "showEarnAvailableAssetsCheckbox": true,
+        "showProveFlow": true,
+        "showSilverRevamp": true,
+        "showTermsAndConditions": false,
+        "sofiAssociateUserBeforeEmailVerification": true,
+        "stakingPromoBanner": true,
+        "stxSelfCustodyEnableAirdrop": true,
+        "stxSelfCustodyEnableAll": true,
+        "themeEnabled": true,
+        "unifiedAccountLogin": true,
+        "useAgentHotWalletAddress": true,
+        "useAgentHotWalletAddressForSell": false,
+        "useLoqateService": true,
+        "useNewPaymentProviders": true,
+        "useVgsProvider": true,
         "walletConnect": true,
-        "withdrawalLocksFundsOnHold": true,
-        "useNewPaymentProviders": true
+        "walletDebitCardEnabled": true,
+        "proveEnabled": true,
+        "showFiatEntityRemediationAlert": true
       }
     }
   },
@@ -36,14 +97,13 @@
     "bitpay": "https://bitpay.com",
     "comRoot": "https://www.blockchain.com",
     "comWalletApp": "https://login.blockchain.com",
-    "everypay": "https://igw-demo.every-pay.com",
     "exchange": "https://exchange.blockchain.com",
     "horizon": "https://horizon.stellar.org",
-    "ledger": "https://manager.api.live.ledger.com",
-    "ledgerSocket": "wss://api.ledgerwallet.com",
+    "opensea": "https://testnets-api.opensea.io",
     "root": "https://blockchain.info",
-    "veriff": "https://magic.veriff.me",
+    "veriff": "*.veriff.me",
     "walletHelper": "https://wallet-helper.blockchain.com",
     "webSocket": "wss://ws.blockchain.info"
-  }
+  },
+  "bakktRedirectUSStates": ["US-HI", "US-LA", "US-NJ", "US-NV", "US-TN", "US-TX", "US-VA"]
 }

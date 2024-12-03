@@ -43,7 +43,7 @@ const BaseTextInput = styled(AutosizeInput).attrs((props) => ({
   &:disabled {
     cursor: not-allowed;
     background-color: ${(props) => props.theme.grey100};
-    border: '1px solid transparent';
+    border: 1px solid transparent;
   }
 `
 
@@ -58,6 +58,12 @@ class TextInput extends React.Component {
     disabled: false,
     height: '40px',
     minHeight: '40px'
+  }
+
+  componentDidMount() {
+    if (this.props.pointerToLeft) {
+      this.input.input.setSelectionRange(0, 0)
+    }
   }
 
   componentDidUpdate(prevProps) {

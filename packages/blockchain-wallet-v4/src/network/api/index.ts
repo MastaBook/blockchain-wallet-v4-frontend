@@ -5,32 +5,42 @@ import btc from './btc'
 import buySell from './buySell'
 import coin from './coin'
 import custodial from './custodial'
+import debitCard from './debitCard'
+import dex from './dex'
+import earn from './earn'
 import eth from './eth'
+import experiments from './experiments'
+import { makeFirebaseApp } from './firebase'
 import httpService from './http'
-import interest from './interest'
 import kvStore from './kvStore'
 import kyc from './kyc'
-import lockbox from './lockbox'
 import misc from './misc'
+import networkConfig from './networkConfig'
 import nfts from './nfts'
 import profile from './profile'
 import rates from './rates'
+import referral from './referral'
+import { makeRemoteConfigApi } from './remoteConfig'
 import send from './send'
 import settings from './settings'
+import sofi from './sofi'
 import swap from './swap'
+import taxCenter from './taxCenter'
 import wallet from './wallet'
 import xlm from './xlm'
 
 const api = ({ apiKey, getAuthCredentials, networks, options, reauthenticate }: any = {}) => {
   const http = httpService({ apiKey })
   const authorizedHttp = apiAuthorize(http, getAuthCredentials, reauthenticate)
-  const apiUrl = options.domains.api
-  const bitpayUrl = options.domains.bitpay
-  const everypayUrl = options.domains.everypay
-  const horizonUrl = options.domains.horizon
-  const ledgerUrl = options.domains.ledger
+  const {
+    api: apiUrl,
+    bitpay: bitpayUrl,
+    horizon: horizonUrl,
+    opensea: openSeaApi,
+    root: rootUrl
+  } = options.domains
   const nabuUrl = `${apiUrl}/nabu-gateway`
-  const rootUrl = options.domains.root
+  const firebaseApp = makeFirebaseApp()
 
   return {
     ...bch({ apiUrl, ...http }),
@@ -40,27 +50,49 @@ const api = ({ apiKey, getAuthCredentials, networks, options, reauthenticate }: 
     ...custodial({
       authorizedGet: authorizedHttp.get,
       authorizedPost: authorizedHttp.post,
+      authorizedPut: authorizedHttp.put,
       nabuUrl,
       ...http
     }),
-    ...eth({ apiUrl, ...http }),
-    ...kvStore({ apiUrl, networks, ...http }),
-    ...kyc({
+    ...debitCard({
+      authorizedDelete: authorizedHttp.deleteRequest,
+      authorizedGet: authorizedHttp.get,
+      authorizedPost: authorizedHttp.post,
+      authorizedPut: authorizedHttp.put,
+      nabuUrl,
+      ...http
+    }),
+    ...dex({
+      apiUrl,
       authorizedGet: authorizedHttp.get,
       authorizedPost: authorizedHttp.post,
       nabuUrl,
       ...http
     }),
-    ...interest({
+    ...earn({
       authorizedGet: authorizedHttp.get,
       authorizedPost: authorizedHttp.post,
       authorizedPut: authorizedHttp.put,
       nabuUrl
     }),
-    ...lockbox({ ledgerUrl, ...http }),
+    ...eth({ apiUrl, openSeaApi, ...http }),
+    ...experiments({
+      authorizedGet: authorizedHttp.get,
+      nabuUrl
+    }),
+    ...kvStore({ apiUrl, networks, ...http }),
+    ...kyc({
+      authorizedGet: authorizedHttp.get,
+      authorizedPost: authorizedHttp.post,
+      authorizedPut: authorizedHttp.put,
+      nabuUrl,
+      ...http
+    }),
     ...misc({ apiUrl, ...http }),
-    ...nfts({ apiUrl, ...http }),
+    ...networkConfig({ apiUrl, authorizedGet: authorizedHttp.get }),
+    ...nfts({ apiUrl, openSeaApi, ...http }),
     ...profile({
+      apiUrl,
       authorizedGet: authorizedHttp.get,
       authorizedPost: authorizedHttp.post,
       authorizedPut: authorizedHttp.put,
@@ -68,26 +100,45 @@ const api = ({ apiKey, getAuthCredentials, networks, options, reauthenticate }: 
       rootUrl,
       ...http
     }),
+    ...referral({
+      authorizedGet: authorizedHttp.get,
+      authorizedPost: authorizedHttp.post,
+      nabuUrl,
+      ...http
+    }),
     ...send({ apiUrl, ...http }),
-    ...settings({ rootUrl, ...http }),
+    ...settings({ authorizedPut: authorizedHttp.put, nabuUrl, rootUrl, ...http }),
     ...buySell({
       authorizedDelete: authorizedHttp.deleteRequest,
       authorizedGet: authorizedHttp.get,
       authorizedPost: authorizedHttp.post,
       authorizedPut: authorizedHttp.put,
-      everypayUrl,
+      nabuUrl,
+      ...http
+    }),
+    ...sofi({
+      authorizedGet: authorizedHttp.get,
+      authorizedPost: authorizedHttp.post,
+      authorizedPut: authorizedHttp.put,
       nabuUrl,
       ...http
     }),
     ...swap({
       authorizedGet: authorizedHttp.get,
       authorizedPost: authorizedHttp.post,
+      authorizedPut: authorizedHttp.put,
       nabuUrl,
       ...http
     }),
     ...rates({ nabuUrl, ...authorizedHttp }),
+    ...taxCenter({
+      authorizedGet: authorizedHttp.get,
+      authorizedPost: authorizedHttp.post,
+      nabuUrl
+    }),
     ...wallet({ rootUrl, ...http }),
-    ...xlm({ apiUrl, horizonUrl, ...http })
+    ...xlm({ apiUrl, horizonUrl, ...http }),
+    ...makeRemoteConfigApi(firebaseApp)
   }
 }
 
@@ -95,16 +146,23 @@ export default api
 
 export type APIType = ReturnType<typeof bch> &
   ReturnType<typeof btc> &
+  ReturnType<typeof buySell> &
   ReturnType<typeof coin> &
   ReturnType<typeof custodial> &
+  ReturnType<typeof debitCard> &
+  ReturnType<typeof dex> &
+  ReturnType<typeof earn> &
   ReturnType<typeof eth> &
-  ReturnType<typeof interest> &
   ReturnType<typeof kyc> &
   ReturnType<typeof misc> &
+  ReturnType<typeof networkConfig> &
   ReturnType<typeof nfts> &
   ReturnType<typeof profile> &
-  ReturnType<typeof buySell> &
+  ReturnType<typeof referral> &
   ReturnType<typeof send> &
+  ReturnType<typeof sofi> &
   ReturnType<typeof swap> &
+  ReturnType<typeof taxCenter> &
   ReturnType<typeof wallet> &
-  ReturnType<typeof xlm>
+  ReturnType<typeof xlm> &
+  ReturnType<typeof makeRemoteConfigApi>

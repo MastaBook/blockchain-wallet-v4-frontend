@@ -1,15 +1,36 @@
 import { CoinfigType } from '@core/types'
 
 declare global {
-  interface Window {
-    APP_VERSION: string
-    CAPTCHA_KEY: string
-    NONCE: string
-    coins: {
-      [key in string]: {
-        coinfig: CoinfigType
-      }
+  type Coins = {
+    [key in string]: {
+      coinfig: CoinfigType // all coin configs for app
     }
-    zxcvbn?: any
+  }
+
+  /**
+   * Number in standard form stored as a string.
+   */
+  type StandardNumericString = string
+
+  interface Window {
+    APP_VERSION: string // build injected app version
+    ApplePaySession?: ApplePaySession
+    BCAndroidSSI: any // android <-> web messaging
+    CAPTCHA_KEY: string
+    // build injected recaptcha key
+    SARDINE_CLIENT_ID: string
+    // build injected sardine access key
+    SARDINE_ENVIRONMENT: string // sardine environment sandbox or production
+    _Sardine: any // Sardine integration
+    _SardineContext: any // Sardine integration
+    WALLET_V5_LINK: string
+    coins: Coins
+    grecaptcha: any // google recaptcha sets this on window
+    history?: {
+      pushState: any
+    }
+    nonce: string // build/server injected recaptcha key
+    receiveMessageFromMobile: (any) => void // mobile <-> web messaging
+    webkit: any // iOS <-> web messaging
   }
 }

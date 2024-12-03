@@ -5,18 +5,21 @@ import { selectors } from 'data'
 import { RootState } from 'data/rootReducer'
 
 export const getData = (state: RootState) => {
-  const interestRateR = selectors.components.interest.getInterestRate(state)
+  const interestRatesR = selectors.components.interest.getInterestRates(state)
   const afterTransactionR = selectors.components.interest.getAfterTransaction(state)
+  const userDataR = selectors.modules.profile.getUserData(state)
 
   return lift(
     (
-      interestRate: ExtractSuccess<typeof interestRateR>,
-      afterTransaction: ExtractSuccess<typeof afterTransactionR>
+      interestRates: ExtractSuccess<typeof interestRatesR>,
+      afterTransaction: ExtractSuccess<typeof afterTransactionR>,
+      userData: ExtractSuccess<typeof userDataR>
     ) => ({
       afterTransaction,
-      interestRate
+      interestRates,
+      userData
     })
-  )(interestRateR, afterTransactionR)
+  )(interestRatesR, afterTransactionR, userDataR)
 }
 
 export default getData

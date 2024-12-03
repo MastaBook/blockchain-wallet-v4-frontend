@@ -1,5 +1,7 @@
 import { concat, mergeRight, prop, propOr } from 'ramda'
 
+import { data as dataActions } from '../../../redux/actions'
+
 export default ({ get, post, rootUrl }) => {
   const fetchPayloadWithSharedKey = (guid, sharedKey) =>
     post({
@@ -16,8 +18,8 @@ export default ({ get, post, rootUrl }) => {
       url: rootUrl
     })
 
-  const fetchPayloadWithTwoFactorAuth = (guid, sessionToken, twoFactorCode) => {
-    return post({
+  const fetchPayloadWithTwoFactorAuth = (guid, sessionToken, twoFactorCode) =>
+    post({
       data: {
         format: 'plain',
         guid,
@@ -29,7 +31,6 @@ export default ({ get, post, rootUrl }) => {
       sessionToken,
       url: rootUrl
     })
-  }
 
   const savePayload = (data) =>
     post({
@@ -38,12 +39,40 @@ export default ({ get, post, rootUrl }) => {
       url: rootUrl
     }).then(() => data.checksum)
 
-  const createPayload = (email, data) =>
+  const createPayload = (email, captchaToken, forceVerifyEmail, data) =>
     post({
-      data: mergeRight({ email, format: 'plain', method: 'insert' }, data),
+      data: mergeRight(
+        {
+          captcha: captchaToken,
+          email,
+          force: forceVerifyEmail,
+          format: 'plain',
+          method: 'insert',
+          siteKey: window.CAPTCHA_KEY
+        },
+        data
+      ),
       endPoint: '/wallet',
       url: rootUrl
     }).then(() => data.checksum)
+
+  const createResetAccountPayload = (email, captchaToken, sessionToken, data) =>
+    post({
+      contentType: 'application/json',
+      data: mergeRight(
+        {
+          captcha: captchaToken,
+          email,
+          siteKey: window.CAPTCHA_KEY
+        },
+        data
+      ),
+      endPoint: '/wallet/recovery/recover-account',
+      sessionToken,
+      url: rootUrl
+    })
+      .then((response) => sessionStorage.setItem('accountRecovery', JSON.stringify(response)))
+      .then(() => data.checksum)
 
   // context => {
   //  addresses: [],
@@ -112,13 +141,19 @@ export default ({ get, post, rootUrl }) => {
       url: rootUrl
     })
 
-  const authorizeVerifyDevice = (fromSessionId, payload, confirm_device) =>
+  const authorizeVerifyDevice = (
+    fromSessionId,
+    magicLinkDataEncoded,
+    confirm_device,
+    exchange_only_login
+  ) =>
     post({
       data: {
         confirm_device,
+        exchange_only_login,
         fromSessionId,
         method: 'authorize-verify-device',
-        payload
+        payload: magicLinkDataEncoded
       },
       endPoint: '/wallet',
       url: rootUrl
@@ -158,20 +193,6 @@ export default ({ get, post, rootUrl }) => {
       sessionToken,
       url: rootUrl
     })
-
-  const remindGuid = (email, captchaToken, sessionToken) => {
-    post({
-      data: {
-        captcha: captchaToken,
-        email,
-        method: 'send-guid-reminder',
-        siteKey: window.CAPTCHA_KEY
-      },
-      endPoint: '/wallet',
-      sessionToken,
-      url: rootUrl
-    })
-  }
 
   // marks timestamp when user last backed up phrase
   const updateMnemonicBackup = (sharedKey, guid) =>
@@ -270,11 +291,34 @@ export default ({ get, post, rootUrl }) => {
       url: rootUrl
     })
 
+  const validate2faResponse = (email, code) =>
+    post({
+      contentType: 'application/json',
+      data: {
+        email,
+        response: code
+      },
+      endPoint: `/wallet/recovery/validate-2fa-response`,
+      url: rootUrl
+    })
+
+  const sendTwoFAChallenge = (walletGuid, sessionToken) =>
+    post({
+      contentType: 'application/json',
+      data: {
+        walletGuid
+      },
+      endPoint: `/wallet/recovery/send-2fa-challenge`,
+      sessionToken,
+      url: rootUrl
+    })
+
   return {
     authorizeLogin,
     authorizeVerifyDevice,
     createPayload,
     createPinEntry,
+    createResetAccountPayload,
     deauthorizeBrowser,
     fetchBlockchainData,
     fetchPayloadWithSession,
@@ -287,14 +331,15 @@ export default ({ get, post, rootUrl }) => {
     handle2faReset,
     obtainSessionToken,
     pollForSessionGUID,
-    remindGuid,
     resendSmsLoginCode,
     reset2fa,
     savePayload,
     sendSecureChannel,
+    sendTwoFAChallenge,
     triggerMnemonicViewedAlert,
     triggerNonCustodialSendAlert,
     updateMnemonicBackup,
+    validate2faResponse,
     verifyEmailToken
   }
 }

@@ -1,60 +1,29 @@
-import React from 'react'
-import { InjectedFormProps } from 'redux-form'
-
-import { Form } from 'components/Form'
-import { LoginSteps } from 'data/types'
+import React, { useEffect, useState } from 'react'
 
 import { Props } from '..'
+import { RECOVER_FORM } from '../model'
 import FirstStep from './FirstStep'
 import SecondStep from './SecondStep'
 
-class RecoveryPhraseContainer extends React.PureComponent<
-  InjectedFormProps<{}, Props> & Props,
-  StateProps
-> {
-  constructor(props) {
-    super(props)
-    this.state = {
-      step: 1
+const RecoveryPhraseContainer = (props: Props) => {
+  const [step, setStateStep] = useState(1)
+
+  useEffect(() => {
+    return () => {
+      props.formActions.clearFields(RECOVER_FORM, false, false, 'mnemonic')
     }
+  }, [])
+
+  const setRecoveryPhraseStep2 = () => {
+    setStateStep(2)
   }
 
-  componentWillUnmount() {
-    this.props.formActions.clearFields('recover', false, false, 'mnemonic')
-  }
-
-  setStep = (step: LoginSteps) => {
-    this.props.formActions.change('recover', 'step', step)
-  }
-
-  handleSubmit = (e) => {
-    e.preventDefault()
-    const { authActions, email, language, mnemonic, recoverPassword } = this.props
-    if (this.state.step === 1) {
-      this.setState({ step: 2 })
-    } else {
-      authActions.restore({
-        email,
-        language,
-        mnemonic,
-        network: undefined,
-        password: recoverPassword
-      })
-    }
-  }
-
-  previousStep = () => {
-    this.setState({ step: 1 })
-  }
-
-  render() {
-    return (
-      <Form onSubmit={this.handleSubmit}>
-        {this.state.step === 1 && <FirstStep {...this.props} />}
-        {this.state.step === 2 && <SecondStep previousStep={this.previousStep} {...this.props} />}
-      </Form>
-    )
-  }
+  return (
+    <>
+      {step === 1 && <FirstStep setRecoveryPhraseStep2={setRecoveryPhraseStep2} {...props} />}
+      {step === 2 && <SecondStep setRecoveryPhraseStep2={setRecoveryPhraseStep2} {...props} />}
+    </>
+  )
 }
 
 export type StateProps = {

@@ -11,11 +11,11 @@ export default {
       categories: ['PROOF_OF_ADDRESS', 'PROOF_OF_INCOME', 'OTHER'],
       maxAllowedFileSizeMBs: 5,
       maxNumAllowedFiles: 8,
-      validTypes: ['jpg', 'png', 'heic']
+      validTypes: ['jpg', 'png']
     },
     nextStep: () => {},
     previousStep: () => {},
-    submitData: (files) => {}
+    submitData: (_) => {}
   },
   component: UploadAndVerify,
   decorators: [

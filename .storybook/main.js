@@ -1,19 +1,18 @@
 const path = require('path')
 
 module.exports = {
-  stories: ['../packages/blockchain-wallet-v4-frontend/src/components/**/*.stories.@(js|jsx|ts|tsx)'],
+  stories: ['../packages/blockchain-wallet-v4-frontend/src/**/*.stories.@(js|jsx|ts|tsx|mdx)'],
   addons: [
     '@storybook/addon-links',
     '@storybook/addon-essentials',
-    'storybook-dark-mode'
   ],
   refs: {
-    'new-core': {
-      title: 'New Core Components',
+    'constellation': {
+      title: 'Constellation Components',
       url: 'https://blockchain.github.io/constellation/'
     },
-    'design-system': {
-      title: 'Core Components',
+    'blockchain-info-components': {
+      title: 'Blockchain Info Components (Deprecated)',
       url: 'http://localhost:6007'
     }
   },
@@ -26,12 +25,14 @@ module.exports = {
     config.resolve.alias = {
       '@core': path.resolve(__dirname, '..', 'packages/blockchain-wallet-v4/src/'),
       components: path.resolve(__dirname, '..', 'packages/blockchain-wallet-v4-frontend/src/components/'),
-      middleware: path.resolve(__dirname, '..', 'packages/blockchain-wallet-v4-frontend/src/middleware/'),
       data: path.resolve(__dirname, '..', 'packages/blockchain-wallet-v4-frontend/src/data/'),
+      hooks: path.resolve(__dirname, '..', 'packages/blockchain-wallet-v4-frontend/src/hooks/'),
       layouts: path.resolve(__dirname, '..', 'packages/blockchain-wallet-v4-frontend/src/layouts/'),
+      middleware: path.resolve(__dirname, '..', 'packages/blockchain-wallet-v4-frontend/src/middleware/'),
       providers: path.resolve(__dirname, '..', 'packages/blockchain-wallet-v4-frontend/src/providers/'),
       services: path.resolve(__dirname, '..', 'packages/blockchain-wallet-v4-frontend/src/services/'),
-      utils: path.resolve(__dirname, '..', 'packages/blockchain-wallet-v4-frontend/src/utils/')
+      utils: path.resolve(__dirname, '..', 'packages/blockchain-wallet-v4-frontend/src/utils/'),
+      generated: path.resolve(__dirname, '..', 'packages/blockchain-wallet-v4-frontend/src/generated/')
     }
 
     // Return the altered config
@@ -39,4 +40,3 @@ module.exports = {
   },
 
 }
-  

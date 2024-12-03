@@ -1,18 +1,27 @@
 import React, { useState } from 'react'
 import { FormattedMessage } from 'react-intl'
 import { connect, ConnectedProps } from 'react-redux'
+import { bindActionCreators, Dispatch } from 'redux'
 import styled from 'styled-components'
 
 import { convertCoinToFiat } from '@core/exchange'
 import { coinToString } from '@core/exchange/utils'
-import { FiatType, PaymentValue, RatesType, RemoteDataType, SwapQuoteType } from '@core/types'
+import {
+  FiatType,
+  PaymentValue,
+  RatesType,
+  RemoteDataType,
+  SwapNewQuoteStateType
+} from '@core/types'
 import { Icon, Link, SkeletonRectangle, Text, TextGroup } from 'blockchain-info-components'
 import FiatDisplay from 'components/Display/FiatDisplay'
 import { Row, Title, Value } from 'components/Flyout'
-import { selectors } from 'data'
+import { actions, selectors } from 'data'
 import { convertBaseToStandard } from 'data/components/exchange/services'
 import { RootState } from 'data/rootReducer'
-import { SwapAccountType, SwapBaseCounterTypes } from 'data/types'
+import { Analytics, SwapAccountType, SwapBaseCounterTypes } from 'data/types'
+
+import { COINS_WITH_CUSTOM_FEE, SOL_FEE, STX_FEE } from '../../constants'
 
 const Container = styled.div`
   background-color: ${(p) => p.theme.grey000};
@@ -49,6 +58,7 @@ const Footer = styled.div`
   padding: 16px;
 `
 const FeeBreakdownBox = ({
+  analyticsActions,
   base,
   basePayment,
   baseRates,
@@ -61,8 +71,18 @@ const FeeBreakdownBox = ({
 }: Props): React.ReactElement => {
   const [toggle, setToggle] = useState(false)
   const networkFee = (value: PaymentValue | undefined) => {
+    if (base.type === SwapBaseCounterTypes.ACCOUNT) {
+      if (base?.coin === COINS_WITH_CUSTOM_FEE.STX) {
+        return STX_FEE
+      }
+
+      if (base?.coin === COINS_WITH_CUSTOM_FEE.SOL) {
+        return SOL_FEE
+      }
+    }
+
     return value
-      ? value.coin === 'BTC' || value.coin === 'BCH'
+      ? value.coin === COINS_WITH_CUSTOM_FEE.BTC || value.coin === COINS_WITH_CUSTOM_FEE.BCH
         ? value.selection?.fee
         : value.fee
       : 0
@@ -77,7 +97,7 @@ const FeeBreakdownBox = ({
     coin: counter.coin,
     currency: walletCurrency,
     rates: counterRates,
-    value: quoteR?.quote?.networkFee || '0'
+    value: quoteR.map((quote) => quote.networkFee || '0').getOrElse('0')
   })
   const counterName = window.coins[counter.coin].coinfig
     ? window.coins[counter.coin].coinfig.name
@@ -89,6 +109,15 @@ const FeeBreakdownBox = ({
     base.type === SwapBaseCounterTypes.CUSTODIAL && counter.type === SwapBaseCounterTypes.CUSTODIAL
   const bothNonCustodial =
     base.type === SwapBaseCounterTypes.ACCOUNT && counter.type === SwapBaseCounterTypes.ACCOUNT
+
+  const toggleFeesView = () => {
+    setToggle((prev) => !prev)
+
+    analyticsActions.trackEvent({
+      key: Analytics.SWAP_CHECKOUT_NETWORK_FEES_CLICKED,
+      properties: {}
+    })
+  }
 
   if (bothCustodial) {
     return (
@@ -136,9 +165,7 @@ const FeeBreakdownBox = ({
                   cursor
                   size='24px'
                   color='blue600'
-                  onClick={() => {
-                    setToggle((prev) => !prev)
-                  }}
+                  onClick={toggleFeesView}
                 />
               </IconWrapper>
             </HorizontalRow>
@@ -162,7 +189,7 @@ const FeeBreakdownBox = ({
                   style={{ alignItems: 'flex-end', display: 'flex', flexDirection: 'column' }}
                 >
                   {basePayment.cata({
-                    Failure: (e) => e,
+                    Failure: (e) => <>{e}</>,
                     Loading: () => <SkeletonRectangle height='18px' width='70px' />,
                     NotAsked: () => <SkeletonRectangle height='18px' width='70px' />,
                     Success: (value) => {
@@ -203,7 +230,7 @@ const FeeBreakdownBox = ({
                   style={{ alignItems: 'flex-end', display: 'flex', flexDirection: 'column' }}
                 >
                   {counterQuote.cata({
-                    Failure: (e) => e,
+                    Failure: (e) => <>{e}</>,
                     Loading: () => <SkeletonRectangle height='18px' width='70px' />,
                     NotAsked: () => <SkeletonRectangle height='18px' width='70px' />,
                     Success: (value) => (
@@ -213,7 +240,7 @@ const FeeBreakdownBox = ({
                             unit: {
                               symbol: counter.coin
                             },
-                            value: convertBaseToStandard(counter.coin, value.quote.networkFee)
+                            value: convertBaseToStandard(counter.coin, value.networkFee)
                           })}
                         </Text>
                         <FiatDisplay
@@ -223,7 +250,7 @@ const FeeBreakdownBox = ({
                           color='grey400'
                           coin={counter.coin}
                         >
-                          {value.quote.networkFee}
+                          {value.networkFee}
                         </FiatDisplay>
                       </>
                     )
@@ -288,25 +315,21 @@ const mapStateToProps = (state: RootState, ownProps: OwnProps) => ({
     .getRatesSelector(ownProps.counter.coin, state)
     .getOrElse({} as RatesType),
   paymentR: selectors.components.swap.getPayment(state).getOrElse({} as PaymentValue),
-  quoteR: selectors.components.swap
-    .getQuote(state)
-    .getOrElse({} as { quote: SwapQuoteType; rate: number }),
+  quoteR: selectors.components.swap.getQuote(state),
   walletCurrency: selectors.core.settings.getCurrency(state).getOrElse('USD') as FiatType
 })
 
-const connector = connect(mapStateToProps)
+const mapDispatchToProps = (dispatch: Dispatch) => ({
+  analyticsActions: bindActionCreators(actions.analytics, dispatch)
+})
+
+const connector = connect(mapStateToProps, mapDispatchToProps)
 
 interface OwnProps {
   base: SwapAccountType
   basePayment: RemoteDataType<string, PaymentValue | undefined>
   counter: SwapAccountType
-  counterQuote: RemoteDataType<
-    string,
-    {
-      quote: SwapQuoteType
-      rate: number
-    }
-  >
+  counterQuote: RemoteDataType<string | Error, SwapNewQuoteStateType>
 }
 type Props = OwnProps & ConnectedProps<typeof connector>
 

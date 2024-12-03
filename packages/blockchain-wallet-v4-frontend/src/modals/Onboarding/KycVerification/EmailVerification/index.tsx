@@ -18,22 +18,18 @@ class VerifyEmail extends PureComponent<Props> {
     if (!isEmailVerified) {
       settingsActions.fetchSettings()
     }
-    this.props.buySellActions.fetchSDDEligibility()
   }
 
   handleSubmit = () => {
-    const { formValues, identityVerificationActions, securityCenterActions, settingsActions } =
-      this.props
+    const { formValues, identityVerificationActions } = this.props
     if (formValues) {
-      identityVerificationActions.updateEmail(formValues.email)
-      securityCenterActions.resendVerifyEmail(formValues.email)
-      settingsActions.setEmail(formValues.email)
+      identityVerificationActions.updateEmail({ email: formValues.email })
     }
   }
 
   onResendEmail = (email: string) => {
     const { securityCenterActions } = this.props
-    securityCenterActions.resendVerifyEmail(email)
+    securityCenterActions.resendVerifyEmail(email, 'VERIFICATION')
   }
 
   render() {

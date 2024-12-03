@@ -1,4 +1,4 @@
-import { CoinType, CrossBorderLimits, WalletAcountType, WalletFiatType } from '@core/types'
+import { CoinType, CrossBorderLimits, WalletAccountType, WalletFiatType } from '@core/types'
 
 import * as AT from './actionTypes'
 
@@ -7,6 +7,22 @@ export const initialized = (payload) => ({
   type: AT.SEND_BCH_INITIALIZED
 })
 export const destroyed = () => ({ type: AT.SEND_BCH_DESTROYED })
+
+export const clearSendBchMaxCustodialWithdrawalFee = () => ({
+  type: AT.CLEAR_SEND_BCH_MAX_CUSTODIAL_WITHDRAWAL_FEE
+})
+export const sendBchFetchMaxCustodialWithdrawalFeeSuccess = (fee: string) => ({
+  payload: fee,
+  type: AT.SEND_BCH_FETCH_MAX_CUSTODIAL_WITHDRAWAL_FEE_SUCCESS
+})
+export const sendBchFetchMaxCustodialWithdrawalFeeLoading = () => ({
+  type: AT.SEND_BCH_FETCH_MAX_CUSTODIAL_WITHDRAWAL_FEE_LOADING
+})
+export const sendBchFetchMaxCustodialWithdrawalFeeFailure = (err) => ({
+  payload: err,
+  type: AT.SEND_BCH_FETCH_MAX_CUSTODIAL_WITHDRAWAL_FEE_FAILURE
+})
+
 export const sendBchPaymentUpdatedLoading = () => ({
   type: AT.SEND_BCH_PAYMENT_UPDATED_LOADING
 })
@@ -39,9 +55,9 @@ export const sendBchBitPayInvoiceExpired = () => ({
 
 export const sendBchFetchLimits = (
   inputCurrency: CoinType,
-  fromAccount: WalletAcountType,
+  fromAccount: WalletAccountType,
   outputCurrency: CoinType,
-  toAccount: WalletAcountType,
+  toAccount: WalletAccountType,
   currency?: WalletFiatType
 ) => ({
   payload: {
@@ -65,4 +81,28 @@ export const sendBchFetchLimitsLoading = () => ({
 export const sendBchFetchLimitsSuccess = (limitsResponse: CrossBorderLimits) => ({
   payload: limitsResponse,
   type: AT.SEND_BCH_FETCH_LIMITS_SUCCESS
+})
+
+export const bchImportedFundsSweep = (importedAddresses: string[]) => ({
+  payload: importedAddresses,
+  type: AT.SEND_BCH_IMPORTED_FUNDS_SWEEP
+})
+
+export const bchImportedFundsSweepFailure = (payload) => ({
+  payload,
+  type: AT.SEND_BCH_IMPORTED_FUNDS_SWEEP_FAILURE
+})
+
+export const bchImportedFundsSweepLoading = () => ({
+  type: AT.SEND_BCH_IMPORTED_FUNDS_SWEEP_LOADING
+})
+
+export const bchImportedFundsSweepSuccess = (payload) => ({
+  payload,
+  type: AT.SEND_BCH_IMPORTED_FUNDS_SWEEP_SUCCESS
+})
+
+export const setImportFundsReceiveIndex = (index: number | null) => ({
+  payload: index,
+  type: AT.SET_IMPORT_FUNDS_RECEIVE_INDEX
 })

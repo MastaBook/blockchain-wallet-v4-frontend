@@ -47,6 +47,7 @@ export {
 export enum FiatTypeEnum {
   EUR,
   USD,
+  ARS,
   AUD,
   BRL,
   CAD,
@@ -72,7 +73,8 @@ export enum FiatTypeEnum {
 export enum WalletFiatEnum {
   EUR,
   GBP,
-  USD
+  USD,
+  ARS
 }
 
 export type CoinType = string
@@ -99,12 +101,12 @@ export type BtcAccountType = {
   xpub: string
 }
 
-export enum WalletAcountEnum {
+export enum WalletAccountEnum {
   CUSTODIAL = 'CUSTODIAL',
   NON_CUSTODIAL = 'NON_CUSTODIAL'
 }
 
-export type WalletAcountType = keyof typeof WalletAcountEnum
+export type WalletAccountType = keyof typeof WalletAccountEnum
 
 export type HDDerivationType = 'bech32' | 'legacy'
 
@@ -114,10 +116,11 @@ export * from '../coinSelection/types'
 export * from '../exchange/currencies'
 export * from '../network/api/buySell/types'
 export * from '../network/api/custodial/types'
+export * from '../network/api/earn/types'
 export * from '../network/api/eth/types'
-export * from '../network/api/interest/types'
 export * from '../network/api/kyc/types'
 export * from '../network/api/misc/types'
+export * from '../network/api/profile/types'
 export * from '../network/api/swap/types'
 export * from '../network/types'
 export * from '../redux/data/custodial/types'

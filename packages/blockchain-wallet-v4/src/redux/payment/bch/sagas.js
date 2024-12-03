@@ -16,7 +16,6 @@ import {
   fromCustodial,
   fromLegacy,
   fromLegacyList,
-  fromLockbox,
   fromPrivateKey,
   isValidAddressOrIndex,
   toCoin,
@@ -49,12 +48,12 @@ export default ({ api }) => {
       .then(map(toCoin(network, fromData)))
 
   // ///////////////////////////////////////////////////////////////////////////
-  const calculateTo = function* (destinations, type, network) {
+  const calculateTo = function* (destinations, type, addressIndex, network) {
     const appState = yield select(identity)
     const wallet = S.wallet.getWallet(appState)
     // if address or account index
     if (isValidAddressOrIndex(destinations)) {
-      return [toOutput('BCH', network, appState, destinations, type)]
+      return [toOutput('BCH', network, appState, destinations, type, addressIndex)]
     }
 
     // if non-empty array of addresses or account indexes
@@ -106,8 +105,6 @@ export default ({ api }) => {
           return fromLegacyList(origin)
         }
         return fromLegacy(origin)
-      case ADDRESS_TYPES.LOCKBOX:
-        return fromLockbox(network, appState, origin, 'BCH')
       default:
         const pkformat = detectPrivateKeyFormat(origin)
         if (pkformat != null) {
@@ -207,8 +204,6 @@ export default ({ api }) => {
   const calculateSignature = function* (
     network,
     password,
-    transport,
-    scrambleKey,
     fromType,
     selection,
     changeIndex,
@@ -231,16 +226,6 @@ export default ({ api }) => {
       case ADDRESS_TYPES.WATCH_ONLY:
       case ADDRESS_TYPES.EXTERNAL:
         return bch.signWithWIF(network, selection)
-      case ADDRESS_TYPES.LOCKBOX:
-        return yield call(
-          bch.signWithLockbox,
-          selection,
-          coinDust,
-          transport,
-          scrambleKey,
-          changeIndex,
-          api
-        )
       default:
         throw new Error('unknown_from')
     }
@@ -275,6 +260,7 @@ export default ({ api }) => {
 
       chain() {
         const chain = (gen, f) =>
+          // eslint-disable-next-line @typescript-eslint/no-use-before-define
           makeChain(function* () {
             return yield f(yield gen())
           })
@@ -292,7 +278,8 @@ export default ({ api }) => {
           init: () => chain(gen, (payment) => payment.init()),
           publish: () => chain(gen, (payment) => payment.publish()),
           sign: (password) => chain(gen, (payment) => payment.sign(password)),
-          to: (destinations, type) => chain(gen, (payment) => payment.to(destinations, type))
+          to: (destinations, type, addressIndex) =>
+            chain(gen, (payment) => payment.to(destinations, type, addressIndex))
         })
 
         return makeChain(function* () {
@@ -357,15 +344,13 @@ export default ({ api }) => {
         return makePayment(merge(p, { result }))
       },
 
-      *sign(password, transport, scrambleKey) {
+      *sign(password) {
         // collect coin dust
         const { coinDust, lockSecret } = yield call(this.getCoinDust)
         const signed = yield call(
           calculateSignature,
           network,
           password,
-          transport,
-          scrambleKey,
           prop('fromType', p),
           prop('selection', p),
           prop('changeIndex', p),
@@ -375,8 +360,8 @@ export default ({ api }) => {
         return makePayment(merge(p, { ...signed, lockSecret }))
       },
 
-      *to(destinations, type) {
-        const to = yield call(calculateTo, destinations, type, network)
+      *to(destinations, type, addressIndex) {
+        const to = yield call(calculateTo, destinations, type, addressIndex, network)
         return makePayment(merge(p, { to }))
       },
 

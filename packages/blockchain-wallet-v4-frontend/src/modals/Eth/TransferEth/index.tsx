@@ -7,6 +7,7 @@ import { actions } from 'data'
 import { ModalName } from 'data/types'
 import modalEnhancer from 'providers/ModalEnhancer'
 
+import { ModalPropsType } from '../../types'
 import { getData } from './selectors'
 import TransferEth from './template'
 
@@ -18,7 +19,7 @@ const DEFAULTS = {
 
 class TransferEthContainer extends React.PureComponent<Props> {
   componentDidMount() {
-    this.props.transferEthActions.initialized({
+    this.props.transferEthActions.transferEthInitialized({
       from: this.props.legacyEthAddr,
       type: 'LEGACY'
     })
@@ -26,7 +27,7 @@ class TransferEthContainer extends React.PureComponent<Props> {
 
   componentDidUpdate() {
     if (Remote.Success.is(this.props.data)) {
-      const { ethBalance, txFee } = this.props.data.getOrElse(DEFAULTS)
+      const { ethBalance, txFee } = this.props.data.data
       if (parseFloat(txFee) > parseFloat(ethBalance)) {
         this.props.modalActions.closeAllModals()
       }
@@ -42,7 +43,7 @@ class TransferEthContainer extends React.PureComponent<Props> {
   }
 
   render() {
-    const { data, legacyEthAddr } = this.props
+    const { data } = this.props
     return data.cata({
       Failure: () => null,
       Loading: () => null,
@@ -52,7 +53,6 @@ class TransferEthContainer extends React.PureComponent<Props> {
           ethAddr={val.ethAddr}
           ethBalance={val.ethBalance}
           onSubmit={this.handleSubmit}
-          legacyEthAddr={legacyEthAddr}
           txFee={val.txFee}
           {...this.props}
         />
@@ -76,7 +76,7 @@ const enhance = compose(modalEnhancer(ModalName.TRANSFER_ETH_MODAL), connector)
 
 type OwnProps = {
   legacyEthAddr: string
-}
+} & ModalPropsType
 
 type Props = OwnProps & ConnectedProps<typeof connector>
 

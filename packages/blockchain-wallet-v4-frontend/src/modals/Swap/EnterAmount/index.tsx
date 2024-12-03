@@ -4,12 +4,13 @@ import { connect, ConnectedProps } from 'react-redux'
 import styled from 'styled-components'
 
 import { formatCoin } from '@core/exchange/utils'
-import { CrossBorderLimitsPyload, ExtractSuccess, WalletAcountEnum } from '@core/types'
+import { CrossBorderLimitsPayload, ExtractSuccess, WalletAccountEnum } from '@core/types'
 import { CoinAccountIcon, Icon, SpinningLoader, Text } from 'blockchain-info-components'
 import { FlyoutWrapper } from 'components/Flyout'
 import { actions, selectors } from 'data'
 import { RootState } from 'data/rootReducer'
 import {
+  Analytics,
   InitSwapFormValuesType,
   SwapAccountType,
   SwapBaseCounterTypes,
@@ -20,6 +21,7 @@ import { Props as BaseProps, SuccessStateType as SuccessType } from '..'
 import { BalanceRow, Border, Option, OptionTitle, OptionValue, TopText } from '../components'
 import { checkAccountZeroBalance } from '../model'
 import Checkout from './Checkout'
+import { ResultAmount } from './ResultAmount'
 import getData from './selectors'
 import Failure from './template.failure'
 import Loading from './template.loading'
@@ -65,12 +67,12 @@ class EnterAmount extends PureComponent<Props> {
       // fetch crossborder limits
       const fromAccount =
         BASE.type === SwapBaseCounterTypes.CUSTODIAL
-          ? WalletAcountEnum.CUSTODIAL
-          : WalletAcountEnum.NON_CUSTODIAL
+          ? WalletAccountEnum.CUSTODIAL
+          : WalletAccountEnum.NON_CUSTODIAL
       const toAccount =
         COUNTER.type === SwapBaseCounterTypes.CUSTODIAL
-          ? WalletAcountEnum.CUSTODIAL
-          : WalletAcountEnum.NON_CUSTODIAL
+          ? WalletAccountEnum.CUSTODIAL
+          : WalletAccountEnum.NON_CUSTODIAL
       const inputCurrency = BASE.coin
       const outputCurrency = COUNTER.coin
       this.props.swapActions.fetchCrossBorderLimits({
@@ -78,11 +80,11 @@ class EnterAmount extends PureComponent<Props> {
         inputCurrency,
         outputCurrency,
         toAccount
-      } as CrossBorderLimitsPyload)
+      } as CrossBorderLimitsPayload)
     }
   }
 
-  handleStepCoinSelection = (accounts: { [key in SwapCoinType]: Array<SwapAccountType> }) => {
+  handleBaseCoinSelection = (accounts: { [key in SwapCoinType]: Array<SwapAccountType> }) => {
     const isAccountZeroBalance = checkAccountZeroBalance(accounts)
 
     if (isAccountZeroBalance) {
@@ -97,11 +99,41 @@ class EnterAmount extends PureComponent<Props> {
         step: 'COIN_SELECTION'
       })
     }
+
+    this.props.analyticsActions.trackEvent({
+      key: Analytics.SWAP_FROM_WALLET_PAGE_CLICKED,
+      properties: {}
+    })
+  }
+
+  handleCounterCoinSelection = () => {
+    this.props.swapActions.setStep({
+      options: {
+        side: 'COUNTER'
+      },
+      step: 'COIN_SELECTION'
+    })
+
+    this.props.analyticsActions.trackEvent({
+      key: Analytics.SWAP_RECEIVE_WALLET_PAGE_CLICKED,
+      properties: {}
+    })
+  }
+
+  handleGoBackClick = () => {
+    this.props.swapActions.returnToInitSwap()
+
+    this.props.analyticsActions.trackEvent({
+      key: Analytics.SWAP_AMOUNT_SCREEN_BACK_CLICKED,
+      properties: {}
+    })
   }
 
   render() {
     if (!this.props.initSwapFormValues?.BASE || !this.props.initSwapFormValues?.COUNTER) {
-      return this.props.swapActions.setStep({ step: 'INIT_SWAP' })
+      this.props.swapActions.setStep({ step: 'INIT_SWAP' })
+
+      return null
     }
 
     const { BASE, COUNTER } = this.props.initSwapFormValues
@@ -109,6 +141,8 @@ class EnterAmount extends PureComponent<Props> {
 
     const { coinfig: baseCoinfig } = window.coins[BASE.coin]
     const { coinfig: counterCoinfig } = window.coins[COUNTER.coin]
+
+    const showSilverRevampBanner = this.props.products?.swap?.maxOrdersLeft > 0
 
     return (
       <>
@@ -121,23 +155,19 @@ class EnterAmount extends PureComponent<Props> {
                 cursor
                 size='24px'
                 color='grey600'
-                onClick={() =>
-                  this.props.swapActions.setStep({
-                    step: 'INIT_SWAP'
-                  })
-                }
+                onClick={this.handleGoBackClick}
               />{' '}
               <Text size='20px' color='grey900' weight={600} style={{ marginLeft: '16px' }}>
                 <FormattedMessage id='copy.new_swap' defaultMessage='New Swap' />
               </Text>
             </SubTopText>
-            {this.props.quoteR.cata({
-              Failure: () => null,
+            {this.props.quotePriceR.cata({
+              Failure: () => <></>,
               Loading: () => <SpinningLoader borderWidth='4px' height='14px' width='14px' />,
               NotAsked: () => <SpinningLoader borderWidth='4px' height='14px' width='14px' />,
               Success: (val) => (
                 <Text size='14px' color='grey900' weight={500}>
-                  1 {baseCoinfig.displaySymbol} = {formatCoin(val.rate)}{' '}
+                  1 {baseCoinfig.displaySymbol} = {formatCoin(val.data.price)}{' '}
                   {counterCoinfig.displaySymbol}
                 </Text>
               )
@@ -155,7 +185,7 @@ class EnterAmount extends PureComponent<Props> {
                   <Option
                     role='button'
                     data-e2e='selectFromAcct'
-                    onClick={() => this.handleStepCoinSelection(val.accounts)}
+                    onClick={() => this.handleBaseCoinSelection(val.accounts)}
                   >
                     <div>
                       <Text color='grey600' weight={500} size='14px'>
@@ -184,14 +214,7 @@ class EnterAmount extends PureComponent<Props> {
                   <Option
                     role='button'
                     data-e2e='selectToAcct'
-                    onClick={() =>
-                      this.props.swapActions.setStep({
-                        options: {
-                          side: 'COUNTER'
-                        },
-                        step: 'COIN_SELECTION'
-                      })
-                    }
+                    onClick={this.handleCounterCoinSelection}
                   >
                     <div>
                       <Text color='grey600' weight={500} size='14px'>
@@ -203,11 +226,10 @@ class EnterAmount extends PureComponent<Props> {
                       <OptionTitle>{COUNTER.label}</OptionTitle>
                       <OptionValue>
                         <BalanceRow>
-                          {val.formValues?.amount
-                            ? `${formatCoin(val.incomingAmount.amt)} ${
-                                counterCoinfig.displaySymbol
-                              }`
-                            : `0 ${counterCoinfig.displaySymbol}`}
+                          <ResultAmount
+                            isRefreshing={val.resultAmountViewModel.isRefreshing}
+                            text={val.resultAmountViewModel.text}
+                          />
                         </BalanceRow>
                       </OptionValue>
                     </div>
@@ -216,7 +238,9 @@ class EnterAmount extends PureComponent<Props> {
                   <Border />
                 </Options>
                 <Checkout {...val} {...this.props} BASE={BASE} COUNTER={COUNTER} />
-                {userData.tiers.current === 1 && <Upgrade {...this.props} />}
+                {(showSilverRevampBanner || userData.tiers.current === 1) && (
+                  <Upgrade {...this.props} />
+                )}
               </>
             )
           })}
@@ -231,12 +255,12 @@ const mapStateToProps = (state: RootState) => {
     data: getData(state),
     initSwapFormValues: selectors.form.getFormValues('initSwap')(state) as InitSwapFormValuesType,
     isPristine: selectors.form.isPristine('swapAmount')(state),
-    quoteR: selectors.components.swap.getQuote(state)
+    quotePriceR: selectors.components.swap.getQuotePrice(state)
   }
 }
 
 const mapDispatchToProps = (dispatch) => ({
-  verifyIdentity: () =>
+  verifyIdentity: () => {
     dispatch(
       actions.components.identityVerification.verifyIdentity({
         needMoreInfo: false,
@@ -244,6 +268,15 @@ const mapDispatchToProps = (dispatch) => ({
         tier: 2
       })
     )
+    dispatch(
+      actions.analytics.trackEvent({
+        key: Analytics.ONBOARDING_GET_MORE_ACCESS_WHEN_YOU_VERIFY,
+        properties: {
+          flow_step: 'SWAP'
+        }
+      })
+    )
+  }
 })
 
 const connector = connect(mapStateToProps, mapDispatchToProps)
@@ -252,7 +285,7 @@ type OwnProps = BaseProps & { handleClose: () => void }
 export type Props = OwnProps & SuccessType & ConnectedProps<typeof connector>
 export type SuccessStateType = ExtractSuccess<ReturnType<typeof getData>> & {
   formErrors: {
-    amount?: 'ABOVE_MAX' | 'BELOW_MIN' | 'NEGATIVE_INCOMING_AMT' | 'ABOVE_MAX_LIMIT' | boolean
+    amount?: 'ABOVE_MAX' | 'BELOW_MIN' | 'ABOVE_MAX_LIMIT' | 'ABOVE_BALANCE' | boolean
   }
 }
 

@@ -1,13 +1,12 @@
 import React, { useState } from 'react'
 import { FormattedMessage } from 'react-intl'
-import { GreyBlueCartridge } from 'blockchain-wallet-v4-frontend/src/modals/Interest/DepositForm/model'
 import styled, { css } from 'styled-components'
 
 import { Button, Icon, Image, SpinningLoader, Text } from 'blockchain-info-components'
 import { OBInstitution } from 'data/types'
 
 const BankWrapper = styled.div`
-  padding: 37px 0 34px;
+  padding: 40px 0 36px;
   height: 100%;
   width: 100%;
   display: flex;
@@ -17,7 +16,6 @@ const NavText = styled(Text)`
   display: flex;
   align-items: center;
   margin-bottom: 24px;
-  padding-left: 40px;
 `
 
 const Section = styled.div`
@@ -25,7 +23,7 @@ const Section = styled.div`
   flex-direction: column;
   flex: 2;
   align-items: center;
-  padding: 20px;
+  padding: 16px;
 `
 const QrContainer = styled.div`
   width: 150px;
@@ -434,32 +432,19 @@ const OverYourLimitMessage = ({ amount, currency, limit, period }) => (
 const StyledOvalButton = styled(Button)`
   border-radius: 32px;
 `
-const OverLimitButton = ({ coin }) => (
-  <StyledOvalButton
-    data-e2e='overLimitButton'
-    height='48px'
-    size='16px'
-    nature='dark-grey'
-    fullwidth
-  >
-    <Image width='16px' height='16px' name='alert-orange' />
-    <Text weight={600} size='16px' style={{ marginLeft: '2px' }} color='white'>
-      <FormattedMessage
-        id='copy.not_enough_coin'
-        defaultMessage='Not Enough {coin}'
-        values={{ coin }}
-      />
-    </Text>
-  </StyledOvalButton>
-)
 
-const AlertButton = ({ children }) => (
+interface AlertButtonProps {
+  children: React.ReactChild
+  onClick?: () => void
+}
+const AlertButton = ({ children, onClick }: AlertButtonProps) => (
   <StyledOvalButton
     data-e2e='overLimitButton'
     height='48px'
     size='16px'
     nature='dark-grey'
     fullwidth
+    onClick={onClick}
   >
     <Image width='16px' height='16px' name='alert-orange' />
     <Text weight={600} size='16px' style={{ marginLeft: '2px' }} color='white'>
@@ -473,13 +458,27 @@ const MaxButtonWrapper = styled.div`
   flex-direction: row;
   justify-content: center;
   height: 32px;
-  margin-top: 70px;
   width: 100%;
+`
+
+const MaxButtonStyled = styled.span`
+  background-color: ${(props) => props.theme.white};
+  border: 1px solid ${(props) => props.theme.grey100};
+  color: ${(props) => props.theme.blue600};
+  cursor: pointer;
+  margin-left: 10px;
+  text-transform: none;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu,
+    Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
 `
 
 const MaxButton = ({ onClick, type }) => (
   <MaxButtonWrapper>
-    <GreyBlueCartridge role='button' data-e2e={`${type}MaxButton`} onClick={onClick}>
+    <MaxButtonStyled role='button' data-e2e={`${type}MaxButton`} onClick={onClick}>
       <FormattedMessage
         id='modals.simplebuy.checkout.maxbuysell'
         defaultMessage='{orderType} Max'
@@ -487,9 +486,25 @@ const MaxButton = ({ onClick, type }) => (
           orderType: type
         }}
       />
-    </GreyBlueCartridge>
+    </MaxButtonStyled>
   </MaxButtonWrapper>
 )
+
+const IconsContainer = styled.div`
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  width: 100%;
+`
+
+const Title = styled(Text)`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 7px;
+  font-size: 24px;
+  font-weight: 600;
+`
 
 export {
   AlertButton,
@@ -500,6 +515,7 @@ export {
   BankWrapper,
   BROKERAGE_INELIGIBLE,
   Hr,
+  IconsContainer,
   IneligibleErrorMessage,
   LinkOptionsWrapper,
   LinkViaDesktop,
@@ -509,10 +525,10 @@ export {
   ModalNavWithBackArrow,
   ModalNavWithCloseIcon,
   NavText,
-  OverLimitButton,
   OverYourLimitMessage,
   ScanWithPhone,
   Section,
   SimpleBankRow,
+  Title,
   TopText
 }

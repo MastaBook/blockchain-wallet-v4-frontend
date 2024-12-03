@@ -3,6 +3,8 @@ import brokerage from './brokerage/sagas'
 import btcTransactions from './btcTransactions/sagas'
 import buySell from './buySell/sagas'
 import coinTransactions from './coinTransactions/sagas'
+import debitCard from './debitCard/sagas'
+import dex from './dex/sagas'
 import ethTransactions from './ethTransactions/sagas'
 import fiatTransactions from './fiatTransactions/sagas'
 import fundRecovery from './fundRecovery/sagas'
@@ -15,6 +17,7 @@ import nfts from './nfts/sagas'
 import onboarding from './onboarding/sagas'
 import priceChart from './priceChart/sagas'
 import recurringBuy from './recurringBuy/sagas'
+import referral from './referral/sagas'
 import refresh from './refresh/sagas'
 import request from './request/sagas'
 import resetWallet2fa from './resetWallet2fa/sagas'
@@ -27,18 +30,21 @@ import sendXlm from './sendXlm/sagas'
 import settings from './settings/sagas'
 import signMessage from './signMessage/sagas'
 import swap from './swap/sagas'
+import taxCenter from './taxCenter/sagas'
+import termsAndConditions from './termsAndConditions/sagas'
 import uploadDocuments from './uploadDocuments/sagas'
 import veriff from './veriff/sagas'
-import walletConnect from './walletConnect/sagas'
 import withdraw from './withdraw/sagas'
 import xlmTransactions from './xlmTransactions/sagas'
 
 export default ({ api, coreSagas, networks }) => ({
   bchTransactions: bchTransactions(),
-  brokerage: brokerage({ api }),
+  brokerage: brokerage({ api, coreSagas, networks }),
   btcTransactions: btcTransactions(),
   buySell: buySell({ api, coreSagas, networks }),
   coinTransactions: coinTransactions(),
+  debitCard: debitCard({ api, coreSagas, networks }),
+  dex: dex({ api, coreSagas, networks }),
   ethTransactions: ethTransactions(),
   fiatTransactions: fiatTransactions(),
   fundRecovery: fundRecovery({ api }),
@@ -47,10 +53,11 @@ export default ({ api, coreSagas, networks }) => ({
   interest: interest({ api, coreSagas, networks }),
   interestUploadDocument: interestUploadDocument({ api }),
   manageAddresses: manageAddresses({ api, networks }),
-  nfts: nfts({ api }),
+  nfts: nfts({ api, coreSagas, networks }),
   onboarding: onboarding(),
   priceChart: priceChart(),
   recurringBuy: recurringBuy({ api }),
+  referral: referral({ api, coreSagas, networks }),
   refresh: refresh(),
   request: request({ api, coreSagas, networks }),
   resetWallet2fa: resetWallet2fa({ api }),
@@ -63,9 +70,10 @@ export default ({ api, coreSagas, networks }) => ({
   settings: settings({ api, coreSagas }),
   signMessage: signMessage({ coreSagas }),
   swap: swap({ api, coreSagas, networks }),
+  taxCenter: taxCenter({ api }),
+  termsAndConditions: termsAndConditions({ api }),
   uploadDocument: uploadDocuments({ api }),
   veriff: veriff({ api, coreSagas }),
-  walletConnect: walletConnect({ coreSagas }),
-  withdraw: withdraw({ api }),
+  withdraw: withdraw({ api, coreSagas, networks }),
   xlmTransactions: xlmTransactions()
 })

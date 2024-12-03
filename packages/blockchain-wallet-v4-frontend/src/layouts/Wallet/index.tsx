@@ -1,44 +1,80 @@
-import React from 'react'
-import { connect, ConnectedProps } from 'react-redux'
+import React, { FC } from 'react'
+import { useSelector } from 'react-redux'
 import { Redirect, Route } from 'react-router-dom'
 
-import { CoinfigType, CoinType } from '@core/types'
-import { selectors } from 'data'
+import { getIsCoinDataLoaded } from '@core/redux/data/coins/selectors'
+import { isAuthenticated } from 'data/auth/selectors'
 
-import WalletLayout from './template'
+import { COIN_APPROVAL_DATE } from './coinApprovalDates'
+import Loading from './template.loading'
+import WalletLayout from './WalletLayout'
 
-class WalletLayoutContainer extends React.PureComponent<Props> {
-  render() {
-    const { component: Component, computedMatch, isAuthenticated, path, ...rest } = this.props
+const WalletLayoutContainer: FC<Props> = ({
+  approvalDate,
+  center,
+  component: Component,
+  computedMatch,
+  hasUkBanner,
+  hideMenu,
+  path,
+  removeContentPadding,
+  ...rest
+}: Props) => {
+  document.title = 'Blockchain.com Wallet'
 
-    return isAuthenticated ? (
-      <Route
-        path={path}
-        render={(props) => (
-          <WalletLayout location={props.location} coin={this.props.coin}>
-            <Component computedMatch={computedMatch} {...rest} />
-          </WalletLayout>
-        )}
-      />
-    ) : (
-      <Redirect to={{ pathname: '/login', state: { from: '' } }} />
-    )
+  const isUserAuthenticated = useSelector(isAuthenticated)
+  const isCoinDataLoaded = useSelector(getIsCoinDataLoaded)
+
+  // IMPORTANT: do not allow routes to load until window.coins is loaded
+  if (!isCoinDataLoaded) return <Loading />
+
+  if (!isUserAuthenticated) {
+    return <Redirect to={{ pathname: '/login', state: { from: '' } }} />
   }
+
+  const coin = computedMatch?.params.coin ?? ''
+
+  const isValidRoute = !(path.includes('/transaction') && !window.coins[coin])
+
+  if (!isValidRoute) {
+    return <Redirect to={{ pathname: '/home', state: { from: '' } }} />
+  }
+
+  const showBannerForCoin = computedMatch?.path.startsWith('/coins/') && coin
+  const pageApprovalDate = showBannerForCoin ? COIN_APPROVAL_DATE[coin] : approvalDate
+
+  return (
+    <Route
+      path={path}
+      render={(props) => (
+        <WalletLayout
+          approvalDate={pageApprovalDate}
+          removeContentPadding={removeContentPadding}
+          hasUkBanner={hasUkBanner}
+          hideMenu={hideMenu}
+          center={center}
+          pathname={props.location.pathname}
+        >
+          <Component computedMatch={computedMatch} {...rest} coin={coin} />
+        </WalletLayout>
+      )}
+    />
+  )
 }
 
-const mapStateToProps = (state) => ({
-  isAuthenticated: selectors.auth.isAuthenticated(state)
-})
-
-const connector = connect(mapStateToProps)
-
-type Props = ConnectedProps<typeof connector> & {
-  coin?: CoinType
-  coinfig?: CoinfigType
+type Props = {
+  approvalDate?: string
+  center?: boolean
   component: React.ComponentType<any>
-  computedMatch?: any
+  computedMatch?: {
+    params: { coin?: string }
+    path: string
+  }
   exact?: boolean
+  hasUkBanner?: boolean
+  hideMenu?: boolean
   path: string
+  removeContentPadding?: boolean
 }
 
-export default connector(WalletLayoutContainer)
+export default WalletLayoutContainer

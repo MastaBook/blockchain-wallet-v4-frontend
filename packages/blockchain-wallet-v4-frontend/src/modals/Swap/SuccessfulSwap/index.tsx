@@ -1,13 +1,18 @@
-import React from 'react'
+/* eslint-disable react-hooks/rules-of-hooks */
+import React, { useCallback, useEffect, useMemo } from 'react'
 import { FormattedMessage } from 'react-intl'
+import { useSelector } from 'react-redux'
+import { isEmpty } from 'ramda'
 import styled from 'styled-components'
 
 import { SwapOrderType } from '@core/types'
-import { Button, Icon, Text } from 'blockchain-info-components'
-import { FlyoutWrapper } from 'components/Flyout'
+import { Button, Image, Link, Text } from 'blockchain-info-components'
+import { duration, FlyoutWrapper } from 'components/Flyout'
 import { getOutput } from 'data/components/swap/model'
+import { Analytics, ModalName } from 'data/types'
 
 import { Props as BaseProps, SuccessStateType } from '..'
+import { getData } from '../selectors'
 
 const Wrapper = styled(FlyoutWrapper)`
   width: 100%;
@@ -17,82 +22,196 @@ const Wrapper = styled(FlyoutWrapper)`
   display: flex;
   flex-direction: column;
 `
-const IconContainer = styled.div`
-  position: relative;
+
+const StyledText = styled(Text)`
+  margin-top: 24px;
 `
-const SwapIcon = styled.div`
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 72px;
-  width: 72px;
-  border-radius: 50%;
-  background: ${(props) => props.theme.blue600};
+
+const StyledSubText = styled(Text)`
+  margin-top: 4px;
 `
-const CheckIcon = styled.div`
-  position: absolute;
-  top: -8px;
-  right: -6px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 2px;
-  border-radius: 50%;
-  background: ${(props) => props.theme.white};
+
+const StyledEarnSubText = styled(Text)`
+  margin-top: 30px;
+  padding: 0 50px;
+  text-align: center;
+`
+
+const StyledDoneButton = styled(Button)`
+  margin-top: 16px;
+`
+
+const StyledEarnButton = styled(Button)`
+  margin-top: 24px;
 `
 
 const SuccessfulSwap: React.FC<Props> = (props) => {
-  if (!props.order) return null
+  const {
+    analyticsActions,
+    close,
+    formActions,
+    handleClose,
+    interestEligible,
+    interestRates,
+    isRewardsFlowAfterSwapEnabled,
+    order,
+    userData
+  } = props
+  if (!order) return null
+  const isUserFromUK = userData?.address?.country === 'GB'
+  const swappedCurrency = useMemo(() => getOutput(order), [order])
+  const swappedCurrencyHasRate = useMemo(
+    () => interestRates[swappedCurrency],
+    [swappedCurrency, interestRates]
+  )
+
+  const interestEligibleCoin = useMemo(
+    () =>
+      !isEmpty(interestEligible) &&
+      !isEmpty(swappedCurrency) &&
+      order.state === 'FINISHED' &&
+      interestEligible[swappedCurrency] &&
+      interestEligible[swappedCurrency]?.eligible,
+    []
+  )
+
+  const isRewardsFullyEnabled = useMemo(
+    () => isRewardsFlowAfterSwapEnabled && interestEligibleCoin && swappedCurrencyHasRate,
+    [isRewardsFlowAfterSwapEnabled, interestEligibleCoin, swappedCurrencyHasRate]
+  )
+
+  const handleEarnRewardsButton = useCallback(() => {
+    analyticsActions.trackEvent({
+      key: Analytics.SWAP_EARN_REWARDS_BUTTON_CLICKED,
+      properties: {
+        currency: swappedCurrency,
+        device: 'WEB'
+      }
+    })
+    close(ModalName.SWAP_MODAL)
+    setTimeout(() => {
+      props.interestActions.showInterestModal({
+        coin: swappedCurrency,
+        step: 'ACCOUNT_SUMMARY'
+      })
+    }, duration)
+  }, [])
+
+  useEffect(() => {
+    if (isRewardsFullyEnabled) {
+      analyticsActions.trackEvent({
+        key: Analytics.SWAP_EARN_REWARDS_BUTTON_VIEWED,
+        properties: {
+          currency: swappedCurrency,
+          device: 'WEB'
+        }
+      })
+    }
+  }, [isRewardsFullyEnabled, swappedCurrency, analyticsActions])
+
+  const onDoneClick = useCallback(() => {
+    formActions.destroy('initSwap')
+    handleClose()
+  }, [])
+
   return (
     <Wrapper>
-      <IconContainer>
-        <SwapIcon>
-          <Icon name='arrows-horizontal' color='white' size='28px' />
-        </SwapIcon>
-        <CheckIcon>
-          <Icon name='checkmark-circle-filled' color='green400' size='32px' />
-        </CheckIcon>
-      </IconContainer>
-      <Text size='20px' color='grey800' weight={600} style={{ marginTop: '24px' }}>
+      <Image name='swap-success' size='32px' />
+      <StyledText size='20px' color='grey800' weight={600} style={{ marginTop: '24px' }}>
         <FormattedMessage id='copy.swap_complete' defaultMessage='Swap Complete' />
-      </Text>
-      {props.order.state === 'FINISHED' ? (
-        <Text size='14px' color='grey600' weight={600} style={{ marginTop: '4px' }}>
+      </StyledText>
+      {order.state === 'FINISHED' ? (
+        <StyledSubText size='14px' color='grey600' weight={600}>
           <FormattedMessage
-            id='copy.swap_in_wallet'
-            defaultMessage='Your {coin} is now in your Wallet.'
+            id='copy.swap_available_in_wallet'
+            defaultMessage='Your {coin} is now available in your Wallet.'
             values={{
-              coin: window.coins[getOutput(props.order)].coinfig.name
+              coin: window.coins[swappedCurrency].coinfig.name
             }}
           />
-        </Text>
+        </StyledSubText>
       ) : (
-        <Text size='14px' color='grey600' weight={600} style={{ marginTop: '4px' }}>
+        <StyledSubText size='14px' color='grey600' weight={600}>
           <FormattedMessage
             id='copy.swap_arrive_soon'
             defaultMessage='Your {coin} will arrive soon.'
             values={{
               // @ts-ignore
-              coin: getOutput(props.order)
+              coin: swappedCurrency
             }}
           />
-        </Text>
+        </StyledSubText>
       )}
-      <Button
-        data-e2e='swapDone'
-        nature='primary'
-        fullwidth
-        jumbo
-        onClick={props.handleClose}
-        style={{ marginTop: '16px' }}
-      >
-        <FormattedMessage id='buttons.done' defaultMessage='Done' />
-      </Button>
+      {!isRewardsFullyEnabled && (
+        <StyledDoneButton
+          data-e2e='swapDone'
+          nature='primary'
+          fullwidth
+          jumbo
+          onClick={handleClose}
+        >
+          <FormattedMessage id='buttons.done' defaultMessage='Done' />
+        </StyledDoneButton>
+      )}
+      {isRewardsFullyEnabled && (
+        <>
+          <StyledEarnSubText size='14px' color='grey600' weight={600}>
+            <FormattedMessage
+              id='copy.swap_earn_paragraph'
+              defaultMessage="Don't keep it waiting, earn up to {rate}% on it with our Rewards Program"
+              values={{
+                rate: swappedCurrencyHasRate
+              }}
+            />
+          </StyledEarnSubText>
+          {isUserFromUK && (
+            <StyledEarnSubText size='14px' color='grey600' weight={600}>
+              APYs are always indicative based on past performance and are not guaranteed. Find out
+              more about Staking and Rewards as well as the risks{' '}
+              <Link
+                size='12px'
+                href='https://support.blockchain.com/hc/en-us/articles/10857163796380-Staking-and-Rewards-what-are-the-risks'
+                target='_blank'
+                style={{ textDecoration: 'underline' }}
+              >
+                here
+              </Link>
+              .
+            </StyledEarnSubText>
+          )}
+
+          <StyledEarnButton
+            data-e2e='swapEarn'
+            nature='primary'
+            fullwidth
+            jumbo
+            onClick={handleEarnRewardsButton}
+          >
+            <FormattedMessage
+              id='modals.tradinglimits.earn_interest'
+              defaultMessage='Earn Rewards'
+            />
+          </StyledEarnButton>
+          <StyledDoneButton
+            data-e2e='swapDone'
+            nature='white-blue'
+            fullwidth
+            jumbo
+            onClick={onDoneClick}
+          >
+            <FormattedMessage id='buttons.done' defaultMessage='Done' />
+          </StyledDoneButton>
+        </>
+      )}
     </Wrapper>
   )
 }
 
-type OwnProps = BaseProps & SuccessStateType & { handleClose: () => void; order?: SwapOrderType }
+type OwnProps = BaseProps &
+  SuccessStateType & {
+    handleClose: () => void
+    order?: SwapOrderType
+  }
 export type Props = OwnProps
 
 export default SuccessfulSwap

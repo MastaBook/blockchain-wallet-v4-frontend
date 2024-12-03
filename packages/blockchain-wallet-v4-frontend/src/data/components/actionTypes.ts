@@ -4,9 +4,7 @@ import * as coinTransactions from './coinTransactions/actionTypes'
 import * as ethTransactions from './ethTransactions/actionTypes'
 import * as fiatTransactions from './fiatTransactions/actionTypes'
 import * as fundRecovery from './fundRecovery/actionTypes'
-import * as identityVerification from './identityVerification/actionTypes'
 import * as importBtcAddress from './importBtcAddress/actionTypes'
-import * as lockbox from './lockbox/actionTypes'
 import * as manageAddresses from './manageAddresses/actionTypes'
 import * as onboarding from './onboarding/actionTypes'
 import * as recoveryPhrase from './recoveryPhrase/actionTypes'
@@ -19,9 +17,7 @@ import * as sendBtc from './sendBtc/actionTypes'
 import * as sendEth from './sendEth/actionTypes'
 import * as sendXlm from './sendXlm/actionTypes'
 import * as signMessage from './signMessage/actionTypes'
-import * as uploadDocuments from './uploadDocuments/actionTypes'
 import * as veriff from './veriff/actionTypes'
-import * as withdraw from './withdraw/actionTypes'
 import * as xlmTransactions from './xlmTransactions/actionTypes'
 
 export {
@@ -31,9 +27,7 @@ export {
   ethTransactions,
   fiatTransactions,
   fundRecovery,
-  identityVerification,
   importBtcAddress,
-  lockbox,
   manageAddresses,
   onboarding,
   recoveryPhrase,
@@ -46,8 +40,6 @@ export {
   sendEth,
   sendXlm,
   signMessage,
-  uploadDocuments,
   veriff,
-  withdraw,
   xlmTransactions
 }

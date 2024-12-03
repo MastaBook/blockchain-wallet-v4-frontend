@@ -1,10 +1,9 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { FormattedMessage } from 'react-intl'
 import { useDispatch } from 'react-redux'
-import { Field, FormErrors, InjectedFormProps, reduxForm, stopAsyncValidation } from 'redux-form'
+import { FormErrors, InjectedFormProps, reduxForm, stopAsyncValidation } from 'redux-form'
 import styled from 'styled-components'
 
-import Currencies from '@core/exchange/currencies'
 import { fiatToString } from '@core/exchange/utils'
 import { BeneficiaryType, BSPaymentMethodType, CrossBorderLimits, FiatType } from '@core/types'
 import {
@@ -17,27 +16,27 @@ import {
   TextGroup
 } from 'blockchain-info-components'
 import { DisplayPaymentIcon } from 'components/BuySell'
-import { AmountTextBox } from 'components/Exchange'
+import { FlyoutWrapper } from 'components/Flyout'
 import {
   FlyoutContainer,
   FlyoutContent,
   FlyoutFooter,
-  FlyoutHeader,
-  FlyoutWrapper
-} from 'components/Flyout'
+  FlyoutHeader
+} from 'components/Flyout/Layout'
 import {
   DepositOrWithdrawal,
   getBankText,
   getBrokerageLimits,
   getIcon,
-  normalizeAmount,
   PaymentArrowContainer,
   PaymentText,
   renderBankFullName,
   RightArrowIcon
 } from 'components/Flyout/model'
 import { checkCrossBorderLimit, minMaxAmount } from 'components/Flyout/validation'
-import { Form } from 'components/Form'
+import AmountFieldInput from 'components/Form/AmountFieldInput'
+import Form from 'components/Form/Form'
+import { Padding } from 'components/Padding'
 import { CheckoutRow } from 'components/Rows'
 import { actions } from 'data'
 import { convertBaseToStandard } from 'data/components/exchange/services'
@@ -56,20 +55,6 @@ const FiatIconWrapper = styled.div`
   justify-content: center;
   position: relative;
 `
-const AmountRow = styled.div<{ isError: boolean }>`
-  display: flex;
-  flex-direction: row;
-  box-sizing: border-box;
-  align-items: center;
-  width: 100%;
-  position: relative;
-  padding: 24px;
-  justify-content: center;
-  border: 0;
-  > input {
-    color: ${(props) => (props.isError ? 'red400' : 'textBlack')};
-  }
-`
 const SubIconWrapper = styled.div`
   background-color: ${(props) => props.theme['fiat-light']};
   width: 24px;
@@ -77,44 +62,6 @@ const SubIconWrapper = styled.div`
   border-radius: 50%;
   position: absolute;
   right: -20px;
-`
-
-const AmountTextBoxShaker = styled(AmountTextBox)<{ meta: { error: string } }>`
-  ${(p) =>
-    p.meta.error
-      ? `
-    animation: shake 0.82s cubic-bezier(.36,.07,.19,.97) both;
-    transform: translate3d(0, 0, 0);
-    backface-visibility: hidden;
-    perspective: 1000px;
-
-    input {
-      color: ${p.theme.red400};
-    }`
-      : ''}
-
-  @keyframes shake {
-    10%,
-    90% {
-      transform: translate3d(-1px, 0, 0);
-    }
-
-    20%,
-    80% {
-      transform: translate3d(2px, 0, 0);
-    }
-
-    30%,
-    50%,
-    70% {
-      transform: translate3d(-4px, 0, 0);
-    }
-
-    40%,
-    60% {
-      transform: translate3d(4px, 0, 0);
-    }
-  }
 `
 
 type LimitSectionProps = {
@@ -153,8 +100,8 @@ const LimitSection = ({ fee = '0', fiatCurrency, limitAmount, orderType }: Limit
             <TextGroup inline>
               <Text color='grey600' size='14px' weight={500}>
                 <FormattedMessage
-                  id='modals.brokerage.withdraw_holding_period'
-                  defaultMessage='Newly added funds are subject to a holding period. You can transfer between your Trading, Rewards, and Exchange accounts in the meantime.'
+                  id='modals.brokerage.withdraw_holding_period_1'
+                  defaultMessage='Newly added funds are subject to a holding period. You can transfer between your Trading, Earn, and Exchange accounts in the meantime.'
                 />
               </Text>
               <Link
@@ -234,7 +181,7 @@ const debounceValidate = (limits, crossBorderLimits, orderType, fiatCurrency, ba
       dispatch(stopAsyncValidation('brokerageTx', limitError))
     }
 
-    const error = minMaxAmount(limits, orderType, fiatCurrency, newValue)
+    const error = minMaxAmount(limits, orderType, fiatCurrency, newValue, bankText)
     if (error) {
       dispatch(stopAsyncValidation('brokerageTx', error))
     }
@@ -244,6 +191,7 @@ type AmountProps = {
   bankText: string
   crossBorderLimits: Props['crossBorderLimits']
   fiatCurrency: Props['fiatCurrency']
+  formActions: typeof actions.form
   limits: Props['paymentMethod']['limits']
   orderType: Props['orderType']
   showError: boolean
@@ -254,72 +202,34 @@ const ErrorMessage = ({ error, orderType }) => {
     return <>{error?.amount}</>
   }
 
-  return <></>
-}
-
-const renderAmount = (props) => {
-  return (
-    <div style={{ display: 'flex', flex: 1, flexDirection: 'column' }}>
-      <div
-        style={{
-          alignItems: 'center',
-          display: 'flex',
-          flexDirection: 'row',
-          justifyContent: 'center'
-        }}
-      >
-        <Text size='56px' color={props.meta.error ? 'red400' : 'textBlack'} weight={500}>
-          {Currencies[props.fiatCurrency]?.units[props.fiatCurrency].symbol}
-        </Text>
-        <AmountTextBoxShaker {...props} />
-      </div>
-      <div
-        style={{
-          alignItems: 'center',
-          display: 'flex',
-          flexDirection: 'row',
-          height: '1rem',
-          justifyContent: 'center',
-          marginTop: '5px'
-        }}
-      />
-    </div>
-  )
+  return null
 }
 
 const Amount = memoizer((props: AmountProps) => {
   const dispatch = useDispatch()
   return (
     <FlyoutWrapper>
-      <AmountRow id='amount-row' isError={!!props.showError}>
-        <Field
-          data-e2e={
-            props.orderType === BrokerageOrderType.DEPOSIT
-              ? 'depositAmountInput'
-              : 'withdrawAmountInput'
-          }
-          name='amount'
-          component={renderAmount}
-          fiatCurrency={props.fiatCurrency}
-          onChange={debounceValidate(
-            props.limits,
-            props.crossBorderLimits,
-            props.orderType,
-            props.fiatCurrency,
-            props.bankText,
-            dispatch
-          )}
-          normalize={normalizeAmount}
-          maxFontSize='56px'
-          placeholder='0'
-          // leave fiatActive always to avoid 50% width in HOC?
-          fiatActive
-          {...{
-            autoFocus: true,
-            hideError: true
-          }}
-        />
-      </AmountRow>
+      <AmountFieldInput
+        fix='FIAT'
+        fiatCurrency={props.fiatCurrency}
+        amountError={props.showError}
+        name='amount'
+        data-e2e={
+          props.orderType === BrokerageOrderType.DEPOSIT
+            ? 'depositAmountInput'
+            : 'withdrawAmountInput'
+        }
+        showCounter={false}
+        showToggle={false}
+        onChange={debounceValidate(
+          props.limits,
+          props.crossBorderLimits,
+          props.orderType,
+          props.fiatCurrency,
+          props.bankText,
+          dispatch
+        )}
+      />
     </FlyoutWrapper>
   )
 })
@@ -344,7 +254,7 @@ const Account = ({
       isMethod={!!paymentAccount}
     >
       <DisplayPaymentIcon showBackground={!paymentAccount}>
-        {getIcon({ ...paymentMethod, ...paymentAccount } as BSPaymentMethodType, false, invalid)}
+        {getIcon({ ...paymentMethod, ...paymentAccount } as BSPaymentMethodType, invalid)}
       </DisplayPaymentIcon>
       <PaymentText isMethod={!!paymentAccount}>{getBankText(paymentAccount)}</PaymentText>
       <PaymentArrowContainer>
@@ -354,38 +264,40 @@ const Account = ({
   )
 }
 
-const NextButton = ({ invalid, orderType, paymentAccount, pristine, submitting }) => {
-  return (
-    <Button
-      data-e2e={orderType === BrokerageOrderType.DEPOSIT ? 'submitDepositAmount' : 'withdrawNext'}
-      height='48px'
-      size='16px'
-      nature='primary'
-      type='submit'
-      fullwidth
-      disabled={invalid || pristine || submitting || !paymentAccount}
-      onClick={() => {}}
-    >
-      {submitting ? (
-        <HeartbeatLoader height='16px' width='16px' color='white' />
-      ) : (
-        <FormattedMessage id='buttons.next' defaultMessage='Next' />
-      )}
-    </Button>
-  )
-}
+const PreviewButton = ({ invalid, orderType, paymentAccount, pristine, submitting }) => (
+  <Button
+    data-e2e={orderType === BrokerageOrderType.DEPOSIT ? 'submitDepositAmount' : 'withdrawNext'}
+    height='48px'
+    size='16px'
+    nature='primary'
+    type='submit'
+    fullwidth
+    disabled={invalid || pristine || submitting || !paymentAccount}
+  >
+    {submitting ? (
+      <HeartbeatLoader height='16px' width='16px' color='white' />
+    ) : (
+      <FormattedMessage
+        id='buttons.preview_buysell'
+        defaultMessage='Preview {orderType}'
+        values={{ orderType: orderType === BrokerageOrderType.DEPOSIT ? 'Deposit' : 'Withdrawal' }}
+      />
+    )}
+  </Button>
+)
 
 const EnterAmount = ({
+  change,
   crossBorderLimits,
   fee,
   fiatCurrency,
-  formActions,
   formErrors,
   handleBack,
   handleMethodClick,
   handleSubmit,
   invalid,
   minWithdrawAmount,
+  onMaxButtonClicked,
   orderType,
   paymentAccount,
   paymentMethod,
@@ -402,6 +314,11 @@ const EnterAmount = ({
   })
 
   const showError = !!formErrors
+
+  // If fees changes, reset just in case previous amount would be now be over any limit
+  useEffect(() => {
+    change('amount', undefined)
+  }, [fee])
 
   return (
     <CustomForm onSubmit={handleSubmit}>
@@ -437,18 +354,18 @@ const EnterAmount = ({
               }
             />
           </div>
-          <MaxButton
-            type={orderType === BrokerageOrderType.DEPOSIT ? 'Deposit' : 'Withdrawal'}
-            onClick={() => {
-              formActions.change(
-                'brokerageTx',
-                'amount',
-                convertBaseToStandard('FIAT', withdrawableBalance || paymentMethod.limits.max)
-              )
-            }}
-          />
         </FlyoutContent>
-        <FlyoutFooter>
+        <FlyoutFooter collapsed>
+          <Padding bottom={24}>
+            <MaxButton
+              type={orderType === BrokerageOrderType.DEPOSIT ? 'Deposit' : 'Withdrawal'}
+              onClick={() => {
+                change('amount', convertBaseToStandard('FIAT', minMaxLimits.max))
+                // record max click withdrawal
+                onMaxButtonClicked?.()
+              }}
+            />
+          </Padding>
           <Account
             handleMethodClick={handleMethodClick}
             invalid={invalid}
@@ -456,7 +373,7 @@ const EnterAmount = ({
             paymentMethod={paymentMethod}
           />
           {!showError && (
-            <NextButton
+            <PreviewButton
               paymentAccount={paymentAccount}
               invalid={invalid}
               orderType={orderType}
@@ -471,36 +388,31 @@ const EnterAmount = ({
   )
 }
 
-export type OwnProps =
+export type OwnProps = {
+  crossBorderLimits: CrossBorderLimits
+  fiatCurrency: FiatType
+  // formErrors: FormErrors<{ amount?: 'ABOVE_MAX' | 'BELOW_MIN' | false }, string> | undefined
+  formErrors: FormErrors<{}, string> | undefined
+  handleBack: () => void
+  handleMethodClick: () => void
+  paymentAccount?: BankTransferAccountType | BeneficiaryType
+  paymentMethod: BSPaymentMethodType
+} & (
   | {
-      crossBorderLimits: CrossBorderLimits
       fee?: never
-      fiatCurrency: FiatType
-      formActions: typeof actions.form
-      // formErrors: FormErrors<{ amount?: 'ABOVE_MAX' | 'BELOW_MIN' | false }, string> | undefined
-      formErrors: FormErrors<{}, string> | undefined
-      handleBack: () => void
-      handleMethodClick: () => void
       minWithdrawAmount?: never
+      onMaxButtonClicked?: never
       orderType: BrokerageOrderType.DEPOSIT
-      paymentAccount?: BankTransferAccountType | BeneficiaryType
-      paymentMethod: BSPaymentMethodType
       withdrawableBalance?: never
     }
   | {
-      crossBorderLimits: CrossBorderLimits
       fee: string
-      fiatCurrency: FiatType
-      formActions: typeof actions.form
-      formErrors: FormErrors<{}, string> | undefined
-      handleBack: () => void
-      handleMethodClick: () => void
       minWithdrawAmount: string
+      onMaxButtonClicked: () => void
       orderType: BrokerageOrderType.WITHDRAW
-      paymentAccount?: BankTransferAccountType | BeneficiaryType
-      paymentMethod: BSPaymentMethodType
       withdrawableBalance: string
     } // add another union type here when moving buy sell enter amount screens over
+)
 
 type Props = OwnProps & InjectedFormProps<{}, OwnProps>
 

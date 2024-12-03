@@ -17,7 +17,6 @@ import {
   fromCustodial,
   fromLegacy,
   fromLegacyList,
-  fromLockbox,
   fromPrivateKey,
   isValidAddressOrIndex,
   toCoin,
@@ -47,13 +46,13 @@ export default ({ api }) => {
       .then(prop('unspent_outputs'))
       .then(map(toCoin(network, fromData)))
 
-  const __calculateTo = function* (destinations, type, network) {
+  const __calculateTo = function* (destinations, type, addressIndex, network) {
     const appState = yield select(identity)
     const wallet = S.wallet.getWallet(appState)
 
     // if address or account index
     if (isValidAddressOrIndex(destinations)) {
-      return [toOutput('BTC', network, appState, destinations, type)]
+      return [toOutput('BTC', network, appState, destinations, type, addressIndex)]
     }
 
     // if non-empty array of addresses or account indexes
@@ -98,8 +97,6 @@ export default ({ api }) => {
           return fromLegacyList(origin)
         }
         return fromLegacy(origin)
-      case ADDRESS_TYPES.LOCKBOX:
-        return fromLockbox(network, appState, origin, 'BTC')
       case ADDRESS_TYPES.CUSTODIAL:
         return fromCustodial(origin)
       default:
@@ -194,15 +191,7 @@ export default ({ api }) => {
     return undefined
   }
 
-  const __calculateSignature = function* (
-    network,
-    password,
-    transport,
-    scrambleKey,
-    fromType,
-    selection,
-    changeIndex
-  ) {
+  const __calculateSignature = function* (network, password, fromType, selection) {
     if (!selection) {
       throw new Error('missing_selection')
     }
@@ -219,8 +208,6 @@ export default ({ api }) => {
       case ADDRESS_TYPES.WATCH_ONLY:
       case ADDRESS_TYPES.EXTERNAL:
         return btc.signWithWIF(network, selection)
-      case ADDRESS_TYPES.LOCKBOX:
-        return yield call(btc.signWithLockbox, selection, transport, scrambleKey, changeIndex, api)
       default:
         throw new Error('unknown_from')
     }
@@ -253,6 +240,7 @@ export default ({ api }) => {
 
       chain() {
         const chain = (gen, f) =>
+          // eslint-disable-next-line @typescript-eslint/no-use-before-define
           makeChain(function* () {
             return yield f(yield gen())
           })
@@ -270,7 +258,8 @@ export default ({ api }) => {
           init: () => chain(gen, (payment) => payment.init()),
           publish: () => chain(gen, (payment) => payment.publish()),
           sign: (password) => chain(gen, (payment) => payment.sign(password)),
-          to: (destinations, type) => chain(gen, (payment) => payment.to(destinations, type))
+          to: (destinations, type, addressIndex) =>
+            chain(gen, (payment) => payment.to(destinations, type, addressIndex))
         })
 
         return makeChain(function* () {
@@ -329,13 +318,11 @@ export default ({ api }) => {
         return makePayment(merge(p, { result }))
       },
 
-      *sign(password, transport, scrambleKey) {
+      *sign(password) {
         const signed = yield call(
           __calculateSignature,
           network,
           password,
-          transport,
-          scrambleKey,
           prop('fromType', p),
           prop('selection', p),
           prop('changeIndex', p)
@@ -344,8 +331,8 @@ export default ({ api }) => {
         return makePayment(merge(p, { ...signed }))
       },
 
-      *to(destinations, type) {
-        const to = yield call(__calculateTo, destinations, type, network)
+      *to(destinations, type, addressIndex) {
+        const to = yield call(__calculateTo, destinations, type, addressIndex, network)
         return makePayment(merge(p, { to }))
       },
 

@@ -1,10 +1,18 @@
+import { WalletOptionsType } from '@core/types'
+import { selectors } from 'data'
 import { RootState } from 'data/rootReducer'
 
-export const getNftAssets = (state: RootState) => state.components.nfts.assets
-export const getNftCollections = (state: RootState) => state.components.nfts.collections
-export const getMarketplace = (state: RootState) => state.components.nfts.marketplace
-export const getOffersMade = (state: RootState) => state.components.nfts.offersMade
+export const getActiveSlug = (state: RootState) => state.components.nfts.activeSlug
+export const getNftCollection = (state: RootState) => state.components.nfts.collection
+export const getNftSearch = (state: RootState) => state.components.nfts.search
+export const getNftUserPreferences = (state: RootState) => state.components.nfts.userPreferences
+export const getOpenSeaAsset = (state: RootState) => state.components.nfts.openSeaAsset
+export const getOpenSeaStatus = (state: RootState) => state.components.nfts.openSeaStatus
+export const getNftOwnerAssets = (state: RootState) => state.components.nfts.nftOwnerAssets
 export const getOrderFlow = (state: RootState) => state.components.nfts.orderFlow
-export const getCancelListing = (state: RootState) => state.components.nfts.cancelListing
-export const getSellOrder = (state: RootState) => state.components.nfts.sellOrder
-export const getTransfer = (state: RootState) => state.components.nfts.transfer
+
+export const getIsTestnet = (state: RootState) =>
+  selectors.core.walletOptions
+    .getDomains(state)
+    .getOrElse({ opensea: 'https://api.opensea.io' } as WalletOptionsType['domains'])
+    .opensea?.includes('testnets')

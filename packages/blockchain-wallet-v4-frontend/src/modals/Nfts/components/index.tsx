@@ -1,17 +1,12 @@
 import styled from 'styled-components'
 
-import { Row } from 'components/Flyout/model'
+import { TableHeader } from 'blockchain-info-components'
+import { Row } from 'components/Flyout'
 
-export const FullAssetImage = styled.div<{ backgroundImage; cropped?: boolean }>`
-  background-image: ${({ backgroundImage }) => `url(${backgroundImage})`};
-  background-size: cover;
-  background-position: center;
-  width: 100%;
-  height: ${(props) => (props.cropped ? '240px' : '480px')};
-`
-
-export const AssetDesc = styled.div`
-  padding: 40px;
+export const StickyTableHeader = styled(TableHeader)`
+  background: ${(props) => props.theme.white};
+  position: sticky;
+  top: 0;
 `
 
 export const StickyCTA = styled.div`
@@ -19,8 +14,19 @@ export const StickyCTA = styled.div`
   border-top: 1px solid ${(props) => props.theme.grey000};
   position: sticky;
   padding: 20px 40px;
+  flex-direction: column;
+  display: flex;
   bottom: 0;
   left: 0;
+`
+
+export const NftFlyoutRow = styled(Row)`
+  padding-top: 8px;
+  padding-bottom: 8px;
+  border: 0px;
+  &:last-child {
+    border: 0px;
+  }
 `
 
 export const CTARow = styled(Row)`
@@ -29,5 +35,11 @@ export const CTARow = styled(Row)`
   &:first-child {
     padding-top: 0px;
     border-top: 0;
+  }
+`
+
+export const RightAlign = styled.div`
+  > div {
+    justify-content: flex-end;
   }
 `

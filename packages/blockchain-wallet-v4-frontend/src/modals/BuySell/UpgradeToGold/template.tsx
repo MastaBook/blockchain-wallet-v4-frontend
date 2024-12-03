@@ -1,179 +1,263 @@
 import React from 'react'
 import { FormattedMessage } from 'react-intl'
-import styled from 'styled-components'
+import { PaletteColors } from '@blockchain-com/constellation'
+import styled, { css } from 'styled-components'
 
 import { Button, Icon, Image, Text } from 'blockchain-info-components'
+import { BlueCartridge } from 'components/Cartridge'
 import { FlyoutWrapper } from 'components/Flyout'
+import { FlyoutContainer } from 'components/Flyout/Layout'
 
-import {
-  NumberContainer,
-  NumberDescription,
-  NumberWrapper,
-  RowNumber,
-  SubTitle
-} from '../template.rejected.styles'
+import { IconsContainer, Title } from '../../components'
 import { Props } from '.'
 
-const Wrapper = styled.div`
-  width: 100%;
-  height: 100%;
-  display: flex;
+const HeaderWrapper = styled(FlyoutWrapper)`
   flex-direction: column;
-`
-const Title = styled(Text)`
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  margin: 20px 0 8px;
+  max-width: 480px;
+  background-color: ${PaletteColors['white-000']};
+  padding: 40px 40px 0 40px;
 `
-const ContentContainer = styled(FlyoutWrapper)`
-  border-top: 1px solid ${(props) => props.theme.grey000};
-`
-const DisplayTitle = styled(Text)`
+const RowItemTitle = styled(Text)`
+  color: ${PaletteColors['grey-900']};
+  font-size: 16px;
+  padding-left: 16px;
   font-weight: 600;
-  font-size: 15px;
+  line-height: 150%;
   display: flex;
-  color: ${(props) => props.theme.textBlack};
-  width: 100%;
+  flex-direction: column;
+  justify-content: center;
+  flex: 1;
 `
-const IconsContainer = styled.div`
+
+const RowItemWrapper = styled.div`
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+`
+
+const RowItemSubTitle = styled(Text)`
+  color: ${PaletteColors['grey-600']};
+  font-size: 14px;
+  padding-left: 16px;
+  font-weight: 500;
+  line-height: 150%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  flex: 1;
+`
+
+const RowItemTitleWhite = styled(RowItemTitle)`
+  color: ${PaletteColors['white-000']};
+`
+
+const RowItemSubTitleWhite = styled(RowItemSubTitle)`
+  color: rgba(255, 255, 255, 0.72);
+`
+const StatusCartridgeBlue = styled(BlueCartridge)`
   display: flex;
   flex-direction: row;
-  justify-content: space-between;
-  width: 100%;
+  background: rgba(255, 255, 255, 0.24);
+  > span {
+    padding: 3px 8px;
+  }
 `
-const Template: React.FC<Props> = (props) => {
+
+const UpgradeContainer = styled.div<{ second?: boolean }>`
+  border: 1px solid ${PaletteColors['grey-000']};
+  box-sizing: border-box;
+  border-radius: 16px;
+  margin: 16px 40px;
+  ${(props) =>
+    props.second &&
+    css`
+      border: 1px solid ${PaletteColors['blue-400']};
+      background-color: ${PaletteColors['blue-600']};
+    `}
+`
+
+const Disclaimer = styled.div`
+  display: flex;
+  justify-content: center;
+  text-align: center;
+  margin-bottom: 20px;
+`
+
+const UpgradeRow = styled.div`
+  display: flex;
+  padding: 16px 24px;
+`
+const UpgradeRowWithBlueBorder = styled(UpgradeRow)`
+  border-bottom: 1px solid ${PaletteColors['blue-400']};
+`
+
+const CloseIconContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: ${PaletteColors['grey-000']};
+  backdrop-filter: blur(54.3656px);
+  > span {
+    justify-content: center;
+  }
+`
+
+const IconsContainerRight = styled(IconsContainer)`
+  justify-content: space-between;
+`
+
+const Template: React.FC<Props> = (props: Props) => {
   return (
-    <Wrapper>
-      <FlyoutWrapper>
-        <IconsContainer>
-          <Image name='tier-gold' size='32px' />
-          <Icon
-            cursor
-            data-e2e='sbCloseModalIcon'
-            name='close'
-            size='20px'
-            color='grey600'
-            role='button'
-            onClick={props.handleClose}
+    <FlyoutContainer>
+      <HeaderWrapper>
+        <IconsContainerRight>
+          <Image width='32px' name='blue-verified' />
+          <CloseIconContainer>
+            <Icon
+              cursor
+              data-e2e='tradingLimitsCloseButton'
+              name='close'
+              size='20px'
+              color='grey600'
+              role='button'
+              onClick={props.handleClose}
+            />
+          </CloseIconContainer>
+        </IconsContainerRight>
+        <Title color='textBlack' size='24px' weight={600} style={{ marginTop: '10px' }}>
+          <FormattedMessage
+            id='modals.onboarding.upgrade_now.title'
+            defaultMessage='Upgrade Your Account.'
           />
-        </IconsContainer>
-        <Title color='grey800' size='24px' weight={600}>
-          <div>
-            <FormattedMessage
-              id='modals.simplebuy.goldupgrade.title1'
-              defaultMessage='Upgrade Your Profile.'
-            />
-          </div>
-          <div>
-            <FormattedMessage
-              id='modals.simplebuy.goldupgrade.title2'
-              defaultMessage='Buy & Sell More Crypto.'
-            />
-          </div>
         </Title>
-        <Text color='grey600' weight={500}>
+        <Title color='textBlack' size='24px' weight={600}>
           <FormattedMessage
-            id='modals.simplebuy.goldupgrade.subtitle'
-            defaultMessage='Verify your identity to increase how much you can Buy, Sell and Swap each week.'
+            id='modals.onboarding.upgrade_now.title_second'
+            defaultMessage='Buy, Sell & Swap More Crypto.'
           />
-        </Text>
-      </FlyoutWrapper>
-
-      <ContentContainer>
-        <Text color='grey600' weight={500}>
-          <RowNumber>
-            <NumberWrapper>
-              <NumberContainer>1</NumberContainer>
-            </NumberWrapper>
-            <NumberDescription>
-              <DisplayTitle>
-                <FormattedMessage
-                  id='modals.confirm.title.verify_identity'
-                  defaultMessage='Verify Your Identity'
-                />
-              </DisplayTitle>
-              <SubTitle>
-                <FormattedMessage
-                  id='modals.simplebuy.kycrequired.verify_identity_description'
-                  defaultMessage='To prevent identity theft or fraud, we’ll need a make sure it’s really you by uploading an ID.'
-                />
-              </SubTitle>
-            </NumberDescription>
-          </RowNumber>
-          <RowNumber>
-            <NumberWrapper>
-              <NumberContainer>2</NumberContainer>
-            </NumberWrapper>
-            <NumberDescription>
-              <DisplayTitle>
-                <FormattedMessage
-                  id='modals.simplebuy.goldupgrade.step2.title'
-                  defaultMessage='Get Approved'
-                />
-              </DisplayTitle>
-              <SubTitle>
-                <FormattedMessage
-                  id='modals.simplebuy.goldupgrade.step2.desc'
-                  defaultMessage='Most applications are approved within minutes but some may take a few days to be reviewed.'
-                />
-              </SubTitle>
-            </NumberDescription>
-          </RowNumber>
-          <RowNumber>
-            <NumberWrapper>
-              <NumberContainer>3</NumberContainer>
-            </NumberWrapper>
-            <NumberDescription>
-              <DisplayTitle>
-                <FormattedMessage
-                  id='modals.simplebuy.goldupgrade.step3.title'
-                  defaultMessage='Buy More Crypto'
-                />
-              </DisplayTitle>
-              <SubTitle>
-                <FormattedMessage
-                  id='modals.simplebuy.goldupgrade.step3.desc'
-                  defaultMessage='Buy, Sell, Swap crypto instantly and never miss another big day in the market.'
-                />
-              </SubTitle>
-            </NumberDescription>
-          </RowNumber>
-        </Text>
-
-        <Button
-          fullwidth
+        </Title>
+        <Text
+          color='grey600'
           size='16px'
-          height='48px'
-          nature='primary'
-          data-e2e='upgradeNowBtn'
-          onClick={() => {
-            props.verifyIdentity()
-          }}
-          style={{ marginTop: '16px' }}
-          type='button'
-        >
-          <FormattedMessage id='scenes.airdrops.success.upgradenow' defaultMessage='Upgrade Now' />
-        </Button>
-        <Button
-          fullwidth
-          size='16px'
-          height='48px'
-          nature='empty-blue'
-          data-e2e='doLaterBtn'
-          onClick={() => {
-            props.handleClose()
-          }}
-          style={{ marginTop: '8px' }}
-          type='button'
+          weight={500}
+          style={{ fontStyle: 'normal', marginTop: '8px' }}
         >
           <FormattedMessage
-            id='modals.confirm.cancel.verify_identity'
-            defaultMessage="I'll Do This Later"
+            id='modals.onboarding.upgrade_now.description'
+            defaultMessage='Verify your identity and unlock access to Buying, Selling, Swapping & Rewards Accounts.'
           />
-        </Button>
-      </ContentContainer>
-    </Wrapper>
+        </Text>
+      </HeaderWrapper>
+
+      <div>
+        <UpgradeContainer second>
+          <UpgradeRowWithBlueBorder>
+            <Image name='white-verified' size='20px' />
+            <RowItemTitleWhite>
+              <FormattedMessage
+                id='modals.onboarding.upgrade_now.full_access'
+                defaultMessage='Full Access'
+              />
+            </RowItemTitleWhite>
+            <StatusCartridgeBlue>
+              <Text color='white' size='12px' weight={500}>
+                <FormattedMessage
+                  id='modals.onboarding.upgrade_now.apply_now'
+                  defaultMessage='Apply Now'
+                />
+              </Text>
+            </StatusCartridgeBlue>
+          </UpgradeRowWithBlueBorder>
+
+          <UpgradeRowWithBlueBorder>
+            <Image name='swap-white' size='20px' />
+            <RowItemWrapper>
+              <RowItemTitleWhite>
+                <FormattedMessage
+                  id='modals.tradinglimits.swap_crypto'
+                  defaultMessage='Swap Crypto'
+                />
+              </RowItemTitleWhite>
+              <RowItemSubTitleWhite>
+                <FormattedMessage
+                  id='modals.onboarding.upgrade_now.between_all_wallets_and_accounts'
+                  defaultMessage='Between All Wallets & Accounts'
+                />
+              </RowItemSubTitleWhite>
+            </RowItemWrapper>
+            <Image name='check-empty-white' size='20px' />
+          </UpgradeRowWithBlueBorder>
+
+          <UpgradeRowWithBlueBorder>
+            <Image name='buy-white-circle' size='20px' />
+            <RowItemWrapper>
+              <RowItemTitleWhite>
+                <FormattedMessage
+                  id='modals.onboarding.upgrade_now.buying_and_selling'
+                  defaultMessage='Buying & Selling'
+                />
+              </RowItemTitleWhite>
+              <RowItemSubTitleWhite>
+                <FormattedMessage
+                  id='modals.onboarding.upgrade_now.card_or_banking_methods'
+                  defaultMessage='Card or Banking Methods'
+                />
+              </RowItemSubTitleWhite>
+            </RowItemWrapper>
+            <Image name='check-empty-white' size='20px' />
+          </UpgradeRowWithBlueBorder>
+
+          <UpgradeRowWithBlueBorder>
+            <Image name='percent-white-circle' size='20px' />
+            <RowItemWrapper>
+              <RowItemTitleWhite>
+                <FormattedMessage
+                  id='modals.tradinglimits.earn_interest'
+                  defaultMessage='Earn Rewards'
+                />
+              </RowItemTitleWhite>
+              <RowItemSubTitleWhite>
+                <FormattedMessage
+                  id='modals.onboarding.upgrade_now.earn_rewards_on_your_crypto'
+                  defaultMessage='Earn Rewards On Your Crypto'
+                />
+              </RowItemSubTitleWhite>
+            </RowItemWrapper>
+            <Image name='check-empty-white' size='20px' />
+          </UpgradeRowWithBlueBorder>
+
+          <div style={{ padding: '25px' }}>
+            <Button
+              fullwidth
+              size='16px'
+              height='48px'
+              nature='empty-secondary'
+              data-e2e='upgradeNowUnlockSilverLimits'
+              type='button'
+              onClick={props.verifyIdentity}
+            >
+              <FormattedMessage
+                id='modals.onboarding.upgrade_now.upgrade_and_unlock'
+                defaultMessage='Upgrade & Unlock'
+              />
+            </Button>
+          </div>
+        </UpgradeContainer>
+
+        <Disclaimer>
+          <RowItemSubTitle>
+            <FormattedMessage
+              id='modals.onboarding.upgrade_now.disclaimer_full_access'
+              defaultMessage='Full Access includes all limited access features'
+            />
+          </RowItemSubTitle>
+        </Disclaimer>
+      </div>
+    </FlyoutContainer>
   )
 }
 

@@ -1,84 +1,136 @@
-import React, { PureComponent } from 'react'
-import { connect, ConnectedProps } from 'react-redux'
-import { bindActionCreators, Dispatch } from 'redux'
+import React, { useCallback, useEffect, useState } from 'react'
+import { connect, ConnectedProps, useDispatch } from 'react-redux'
+import { bindActionCreators } from 'redux'
+import { clearSubmitErrors } from 'redux-form'
 
-import {
-  BSCardType,
-  BSOrderType,
-  Everypay3DSResponseType,
-  ProviderDetailsType,
-  RemoteDataType
-} from '@core/types'
-import DataError from 'components/DataError'
-import { actions } from 'data'
+import { BSOrderType, WalletOptionsType } from '@core/types'
+import BaseError from 'components/BuySell/Error'
+import { GenericNabuErrorFlyout } from 'components/GenericNabuErrorFlyout'
+import { actions, selectors } from 'data'
+import { CARD_ERROR_CODE, FORM_BS_PREVIEW_SELL } from 'data/components/buySell/model'
 import { RootState } from 'data/rootReducer'
+import { useRemote } from 'hooks'
+import { isNabuError } from 'services/errors'
 
-import { getData } from './selectors'
 import Loading from './template.loading'
 import Success from './template.success'
 
-class ThreeDSHandlerEverypay extends PureComponent<Props, State> {
-  state: State = {
-    threeDSCallbackReceived: false
-  }
+const ThreeDSHandlerEverypay = (props: Props) => {
+  const [isPolling, setPolling] = useState(false)
+  const order = useRemote(() => props.orderR)
+  const dispatch = useDispatch()
 
-  componentDidMount() {
-    window.addEventListener('message', this.handlePostMessage, false)
-  }
+  const handlePostMessage = async ({ data }: { data: { payment: 'SUCCESS' } }) => {
+    if (data.payment !== 'SUCCESS') return
 
-  componentDidUpdate(prevProps: Props) {
-    if (
-      !prevProps.data.getOrElse({ order: {} } as SuccessStateType).order &&
-      this.props.data.getOrElse({ order: {} } as SuccessStateType).order
-    ) {
-      // eslint-disable-next-line
-      this.setState({ threeDSCallbackReceived: false })
+    setPolling(true)
+
+    if (!order.data) {
+      throw new Error('ORDER_NOT_FOUND')
     }
+
+    props.buySellActions.pollOrder({ orderId: order.data.id, waitUntilSettled: true })
   }
 
-  componentWillUnmount() {
-    window.removeEventListener('message', this.handlePostMessage, false)
-  }
-
-  handlePostMessage = (event: MessageEvent) => {
-    if (event.data.from !== 'everypay') return
-    if (event.data.to !== 'sb') return
-    if (event.data.command !== 'finished') return
-
-    this.setState({ threeDSCallbackReceived: true })
-    // @ts-ignore
-    const { card, order, type } = this.props.data.getOrElse({
-      card: { id: '' },
-      order: { id: '' },
-      type: null
-    } as SuccessStateType)
-
-    switch (type) {
-      case 'ORDER':
-        this.props.buySellActions.pollOrder(order.id)
-        break
-      case 'CARD':
-        this.props.buySellActions.pollCard(card.id)
-        break
-      default:
+  const handleBack = useCallback(() => {
+    if (order.data) {
+      return props.buySellActions.proceedToBuyConfirmation({
+        mobilePaymentMethod: props.mobilePaymentMethod,
+        paymentMethodId: order.data.paymentMethodId,
+        paymentType: order.data.paymentType
+      })
     }
-  }
 
-  render() {
-    return this.props.data.cata({
-      Failure: (e) => <DataError message={{ message: e }} />,
-      Loading: () => <Loading />,
-      NotAsked: () => <Loading />,
-      Success: (val) => <Success {...val} {...this.props} {...this.state} />
+    props.buySellActions.setStep({
+      step: 'DETERMINE_CARD_PROVIDER'
     })
+  }, [order.data, props.buySellActions, props.mobilePaymentMethod])
+
+  const handleReset = useCallback(() => {
+    props.buySellActions.destroyCheckout()
+
+    dispatch(clearSubmitErrors(FORM_BS_PREVIEW_SELL))
+  }, [props.buySellActions, dispatch])
+
+  const handleRetry = useCallback(() => {
+    props.buySellActions.setStep({
+      step: 'DETERMINE_CARD_PROVIDER'
+    })
+  }, [props.buySellActions])
+
+  useEffect(() => {
+    window.addEventListener('message', handlePostMessage, false)
+
+    return () => window.removeEventListener('message', handlePostMessage, false)
+  })
+
+  const renderError = useCallback(
+    (error: unknown) => {
+      if (isNabuError(error)) {
+        return <GenericNabuErrorFlyout error={error} onDismiss={handleBack} />
+      }
+
+      return (
+        <BaseError
+          code={error}
+          handleReset={handleReset}
+          handleBack={handleBack}
+          handleRetry={handleRetry}
+        />
+      )
+    },
+    [handleReset, handleBack, handleRetry]
+  )
+
+  if (order.hasError && order.error) {
+    return renderError(order.error)
   }
+
+  if (order.isLoading) {
+    return <Loading />
+  }
+
+  if (order.isNotAsked) {
+    return <Loading />
+  }
+
+  if (isPolling) {
+    return <Loading polling order={order.hasData} />
+  }
+
+  let paymentLink = ''
+
+  if (order.data?.attributes && order.data.attributes.everypay) {
+    paymentLink = encodeURIComponent(order.data?.attributes?.everypay.paymentLink)
+  }
+
+  if (order.data?.attributes?.cardProvider?.cardAcquirerName === 'EVERYPAY') {
+    paymentLink = encodeURIComponent(order.data?.attributes?.cardProvider.paymentLink)
+  }
+
+  if (!paymentLink) {
+    return renderError(CARD_ERROR_CODE.CREATE_FAILED)
+  }
+
+  return (
+    <Success
+      handleBack={handleBack}
+      order={order?.data}
+      paymentLink={paymentLink}
+      domains={props.domains}
+    />
+  )
 }
 
-const mapStateToProps = (state: RootState): LinkStatePropsType => ({
-  data: getData(state)
+const mapStateToProps = (state: RootState) => ({
+  domains: selectors.core.walletOptions.getDomains(state).getOrElse({
+    walletHelper: 'https://wallet-helper.blockchain.com'
+  } as WalletOptionsType['domains']),
+  mobilePaymentMethod: selectors.components.buySell.getBSMobilePaymentMethod(state),
+  orderR: selectors.components.buySell.getBSOrder(state)
 })
 
-const mapDispatchToProps = (dispatch: Dispatch) => ({
+const mapDispatchToProps = (dispatch) => ({
   buySellActions: bindActionCreators(actions.components.buySell, dispatch)
 })
 
@@ -87,20 +139,12 @@ const connector = connect(mapStateToProps, mapDispatchToProps)
 type OwnProps = {
   handleClose: () => void
 }
-export type SuccessStateType =
-  | { domains: { walletHelper: string }; order: BSOrderType; type: 'ORDER' }
-  | {
-      card: BSCardType
-      domains: { walletHelper: string }
-      order: BSOrderType
-      providerDetails: ProviderDetailsType
-      threeDSDetails: Everypay3DSResponseType
-      type: 'CARD'
-    }
-type LinkStatePropsType = {
-  data: RemoteDataType<string, SuccessStateType>
+
+export type SuccessStateType = {
+  domains: WalletOptionsType['domains']
+  order?: BSOrderType
 }
+
 export type Props = OwnProps & ConnectedProps<typeof connector>
-export type State = { threeDSCallbackReceived: boolean }
 
 export default connector(ThreeDSHandlerEverypay)

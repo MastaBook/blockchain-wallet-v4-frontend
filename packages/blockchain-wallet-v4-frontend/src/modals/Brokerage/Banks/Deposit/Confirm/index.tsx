@@ -1,50 +1,52 @@
 import React, { useEffect } from 'react'
-import { connect, ConnectedProps } from 'react-redux'
-import { bindActionCreators, Dispatch } from 'redux'
+import { useDispatch, useSelector } from 'react-redux'
 
-import { ExtractSuccess } from '@core/types'
-import { FlyoutOopsError } from 'components/Flyout'
+import { FlyoutOopsError } from 'components/Flyout/Errors'
 import { actions, selectors } from 'data'
-import { RootState } from 'data/rootReducer'
+import { convertStandardToBase } from 'data/components/exchange/services'
 import { BrokerageTxFormValuesType } from 'data/types'
+import { useRemote } from 'hooks'
 
 import Loading from '../template.loading'
-import { getData } from './selectors'
-import Success from './template.success'
+import Success from './DepositConfirm'
 
-const DepositMethods = (props: Props) => {
+const DepositMethods = ({ handleClose }: Props) => {
+  const dispatch = useDispatch()
+
+  const defaultMethod = useSelector(selectors.components.brokerage.getAccount)
+  const formValues = useSelector(
+    selectors.form.getFormValues('brokerageTx')
+  ) as BrokerageTxFormValuesType
+
+  const { data, hasError, isLoading, isNotAsked } = useRemote(
+    selectors.components.brokerage.getDepositTerms
+  )
+
   useEffect(() => {
-    props.sendActions.getLockRule()
+    dispatch(actions.components.send.getLockRule())
+    if (formValues?.currency && defaultMethod) {
+      dispatch(
+        actions.components.brokerage.fetchDepositTerms({
+          amount: {
+            symbol: formValues.currency,
+            value: String(convertStandardToBase('FIAT', formValues.amount))
+          },
+          paymentMethodId: defaultMethod.id
+        })
+      )
+    }
   }, [])
 
-  return props.data.cata({
-    Failure: () => (
-      <FlyoutOopsError action='close' data-e2e='depositTryAgain' handler={props.handleClose} />
-    ),
-    Loading: () => <Loading />,
-    NotAsked: () => <Loading />,
-    Success: (val) => <Success {...val} {...props} />
-  })
+  if (isLoading || isNotAsked) return <Loading />
+  if (hasError) {
+    return <FlyoutOopsError action='close' data-e2e='depositTryAgain' handler={handleClose} />
+  }
+
+  return <Success depositTerms={data} defaultMethod={defaultMethod} formValues={formValues} />
 }
 
-const mapStateToProps = (state: RootState) => ({
-  data: getData(state),
-  defaultMethod: selectors.components.brokerage.getAccount(state),
-  fiatCurrency: selectors.core.settings.getCurrency(state),
-  formValues: selectors.form.getFormValues('brokerageTx')(state) as BrokerageTxFormValuesType
-})
-
-export const mapDispatchToProps = (dispatch: Dispatch) => ({
-  brokerageActions: bindActionCreators(actions.components.brokerage, dispatch),
-  sendActions: bindActionCreators(actions.components.send, dispatch)
-})
-
-export type OwnProps = {
+export type Props = {
   handleClose: () => void
 }
-const connector = connect(mapStateToProps, mapDispatchToProps)
 
-export type SuccessStateType = ExtractSuccess<ReturnType<typeof getData>>
-export type Props = OwnProps & ConnectedProps<typeof connector>
-
-export default connector(DepositMethods)
+export default DepositMethods

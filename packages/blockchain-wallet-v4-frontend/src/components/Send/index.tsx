@@ -4,7 +4,8 @@ import styled from 'styled-components'
 import { ADDRESS_TYPES } from '@core/redux/payment/btc/utils'
 import { CustodialFromType } from '@core/types'
 import { Banner } from 'blockchain-info-components'
-import { FormGroup, FormLabel } from 'components/Form'
+import FormGroup from 'components/Form/FormGroup'
+import FormLabel from 'components/Form/FormLabel'
 import { media } from 'services/styles'
 
 import LockTime from './LockTime'
@@ -81,6 +82,6 @@ export const CustomFeeAlertBanner = styled(Banner)`
 `
 
 export const CustodyToAccountMessage = memo(({ account }: { account: CustodialFromType }) => {
-  if (account.type !== ADDRESS_TYPES.CUSTODIAL) return null
+  if (account?.type !== ADDRESS_TYPES.CUSTODIAL) return null
   return <LockTime />
 })

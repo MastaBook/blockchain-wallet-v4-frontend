@@ -1,8 +1,8 @@
-import React, { ReactElement } from 'react'
+import React, { ReactElement, useMemo } from 'react'
 import { FormattedMessage } from 'react-intl'
 import styled from 'styled-components'
 
-import { BeneficiaryType, NabuSymbolNumberType } from '@core/types'
+import { BeneficiaryType } from '@core/types'
 import { Icon, Image, Text } from 'blockchain-info-components'
 import { AddNewButton } from 'components/Brokerage'
 import { FlyoutWrapper } from 'components/Flyout'
@@ -16,7 +16,6 @@ type OwnProps = {
   account: BankTransferAccountType | undefined
   bankTransferAccounts: BankTransferAccountType[]
   beneficiaries: BeneficiaryType[]
-  minAmount: NabuSymbolNumberType
 }
 type Props = _P & OwnProps
 
@@ -43,6 +42,10 @@ const getLinkedBankIcon = (bankName: string): ReactElement => (
 )
 
 const BankList = (props: Props) => {
+  const bankTransferAccounts = useMemo(
+    () => props.bankTransferAccounts.filter((account) => account.currency === props.fiatCurrency),
+    [props.bankTransferAccounts, props.fiatCurrency]
+  )
   return (
     <Wrapper>
       <Header>
@@ -67,7 +70,7 @@ const BankList = (props: Props) => {
       </Header>
 
       <AccountsListWrapper>
-        {props.bankTransferAccounts.map((account) => (
+        {bankTransferAccounts.map((account) => (
           <Bank
             key={account.id}
             bankDetails={account.details}
@@ -86,7 +89,6 @@ const BankList = (props: Props) => {
           <BankWire
             key={beneficiary.id}
             beneficiary={beneficiary}
-            minAmount={props.minAmount}
             onClick={() => {
               props.brokerageActions.setDWStep({
                 dwStep: BankDWStepType.WIRE_INSTRUCTIONS

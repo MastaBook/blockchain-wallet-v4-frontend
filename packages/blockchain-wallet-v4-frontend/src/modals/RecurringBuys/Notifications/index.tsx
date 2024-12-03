@@ -5,11 +5,11 @@ import { bindActionCreators } from 'redux'
 import styled from 'styled-components'
 
 import { Button, Icon, Text } from 'blockchain-info-components'
-import { FlyoutFooter, FlyoutHeader } from 'components/Flyout'
+import { FlyoutFooter, FlyoutHeader } from 'components/Flyout/Layout'
 import { actions } from 'data'
+import { ModalName } from 'data/types'
 
 import AnimatedCarousel from './AnimatedCarousel'
-import AnimatedGraph from './AnimatedGraph'
 
 const Wrapper = styled.div`
   display: flex;
@@ -84,7 +84,6 @@ class Notifications extends PureComponent<Props, State> {
         </FlyoutHeader>
 
         <MainContent>
-          <AnimatedGraph stepIndex={this.state.stepIndex} />
           <AnimatedCarousel stepChange={this.stepChange}>
             <Slide>
               <SlideContent>
@@ -185,7 +184,7 @@ class Notifications extends PureComponent<Props, State> {
             style={{ marginTop: '16px' }}
             onClick={() => {
               this.props.buySellActions.showModal({ origin: 'RecurringBuyPromo' })
-              this.props.modalActions.closeModal('RECURRING_BUYS_MODAL')
+              this.props.modalActions.closeModal(ModalName.RECURRING_BUYS_MODAL)
             }}
           >
             <FormattedMessage

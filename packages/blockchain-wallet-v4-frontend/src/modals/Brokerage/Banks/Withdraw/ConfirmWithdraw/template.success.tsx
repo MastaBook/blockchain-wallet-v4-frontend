@@ -1,30 +1,45 @@
 import React from 'react'
 import { FormattedMessage } from 'react-intl'
+import { useDispatch, useSelector } from 'react-redux'
 import { InjectedFormProps, reduxForm } from 'redux-form'
 import styled from 'styled-components'
 
-import { displayFiatToFiat } from '@core/exchange'
 import { fiatToString } from '@core/exchange/utils'
-import { NabuSymbolNumberType } from '@core/types'
 import { Button, HeartbeatLoader, Icon, Text } from 'blockchain-info-components'
 import { ErrorCartridge } from 'components/Cartridge'
 import CoinDisplay from 'components/Display/CoinDisplay'
-import { FlyoutWrapper, Row, Title, Value } from 'components/Flyout'
-import { Form } from 'components/Form'
-import { WithdrawCheckoutFormValuesType, WithdrawStepEnum } from 'data/types'
+import { FlyoutWrapper, Row, Value } from 'components/Flyout'
+import Form from 'components/Form/Form'
+import { withdraw } from 'data/components/actions'
+import { brokerage } from 'data/components/selectors'
+import { getAmount } from 'data/components/withdraw/selectors'
+import { getUserCountryCode } from 'data/modules/profile/selectors'
+import { WithdrawCheckoutFormValuesType } from 'data/types'
+import { useSardineContext } from 'hooks'
 
-import { Props as OwnProps, SuccessStateType } from '.'
+import { ConfirmWithdrawProps } from '.'
 
 const Top = styled(Text)`
   display: flex;
   align-items: center;
   margin-bottom: 16px;
 `
+const SubTitle = styled(Text)`
+  text-align: center;
+  line-height: 150%;
+  margin-top: 32px;
+`
 const AmountContainer = styled.div`
   margin-top: 40px;
   margin-bottom: 24px;
   display: flex;
 `
+
+const RowDisclaimer = styled(Row)`
+  padding-top: 0px;
+  padding-bottom: 0px;
+`
+
 const ErrorContainer = styled(FlyoutWrapper)`
   display: flex;
   justify-content: center;
@@ -36,18 +51,30 @@ const ErrorContainer = styled(FlyoutWrapper)`
 const Success: React.FC<InjectedFormProps<WithdrawCheckoutFormValuesType, Props> & Props> = (
   props
 ) => {
-  return (
-    <Form
-      onSubmit={(e) => {
-        e.preventDefault()
+  const dispatch = useDispatch()
 
-        props.withdrawActions.handleCustodyWithdraw(
-          props.formValues.amount,
-          props.beneficiary || props.defaultMethod || null,
-          props.fiatCurrency
-        )
-      }}
-    >
+  const [sardineContextIsReady, sardineContext] = useSardineContext('WITHDRAWAL')
+
+  const userCountryCode = useSelector(getUserCountryCode).getOrElse('default')
+  const defaultMethod = useSelector(brokerage.getAccount)
+  const amount = useSelector(getAmount) ?? '0'
+
+  const onSubmit = (e) => {
+    e.preventDefault()
+    dispatch(
+      withdraw.handleCustodyWithdraw({
+        amount,
+        beneficiary: props.beneficiary || defaultMethod || null,
+        fiatCurrency: props.fiatCurrency
+      })
+    )
+    if (sardineContextIsReady) {
+      sardineContext.updateConfig({ flow: 'WITHDRAWAL' })
+    }
+  }
+
+  return (
+    <Form onSubmit={onSubmit}>
       <FlyoutWrapper>
         <Top>
           <Icon
@@ -55,13 +82,7 @@ const Success: React.FC<InjectedFormProps<WithdrawCheckoutFormValuesType, Props>
             size='20px'
             role='button'
             style={{ marginRight: '16px' }}
-            onClick={() =>
-              props.withdrawActions.setStep({
-                beneficiary: props.beneficiary,
-                fiatCurrency: props.fiatCurrency,
-                step: WithdrawStepEnum.ENTER_AMOUNT
-              })
-            }
+            onClick={props.onClickBack}
           />
           <Text size='20px' weight={600} color='grey800'>
             <FormattedMessage id='copy.confirm_withdrawal' defaultMessage='Confirm Withdrawal' />
@@ -69,51 +90,62 @@ const Success: React.FC<InjectedFormProps<WithdrawCheckoutFormValuesType, Props>
         </Top>
         <AmountContainer>
           <CoinDisplay color='grey800' size='32px' weight={600} coin={props.fiatCurrency}>
-            {props.amount}
+            {amount}
           </CoinDisplay>
-          &nbsp;
-          <Text color='grey800' size='32px' weight={600}>
-            {props.fiatCurrency}
-          </Text>
         </AmountContainer>
       </FlyoutWrapper>
       <Row>
-        <Title>
+        <Text color='grey600' size='14px' weight={500} lineHeight='21px'>
           <FormattedMessage id='copy.from' defaultMessage='From' />
-        </Title>
-        <Value>
-          <FormattedMessage
-            id='modals.brokerage.fiat_account'
-            defaultMessage='{currency} Account'
-            values={{
-              currency: props.fiatCurrency
-            }}
-          />
-        </Value>
+        </Text>
+        <Value>{window.coins[props.fiatCurrency]?.coinfig.name ?? props.fiatCurrency}</Value>
       </Row>
       <Row>
-        <Title>
+        <Text color='grey600' size='14px' weight={500} lineHeight='21px'>
           <FormattedMessage id='copy.to' defaultMessage='To' />
-        </Title>
-        <Value>{props.beneficiary?.name || props.defaultMethod?.details.bankName}</Value>
-        <Value>{props.defaultMethod?.details.accountName || ''}</Value>
+        </Text>
+        <Value>{props.beneficiary?.name || defaultMethod?.details.bankName}</Value>
+        <Value>{defaultMethod?.details.accountName || ''}</Value>
       </Row>
       <Row>
-        <Title>
+        <Text color='grey600' size='14px' weight={500} lineHeight='21px'>
           <FormattedMessage id='copy.fee' defaultMessage='Fee' />
-        </Title>
+        </Text>
         <Value>
-          {props.fees.value} {props.fiatCurrency}
+          {fiatToString({
+            digits: 2,
+            unit: props.fiatCurrency,
+            value: props.fees.value
+          })}
         </Value>
       </Row>
       <Row>
-        <Title>
+        <Text color='grey600' size='14px' weight={500} lineHeight='21px'>
           <FormattedMessage id='copy.total' defaultMessage='Total' />
-        </Title>
+        </Text>
         <Value>
-          {displayFiatToFiat({ value: props.amount })} {props.fiatCurrency}
+          {fiatToString({
+            digits: 2,
+            unit: props.fiatCurrency,
+            value: amount
+          })}
         </Value>
       </Row>
+      <RowDisclaimer>
+        <SubTitle size='14px' color='grey600' weight={500}>
+          {userCountryCode === 'AR' ? (
+            <FormattedMessage
+              id='modals.simplebuy.withdrawal.arrive_description_ARS'
+              defaultMessage='The funds can take up to 3 business days to arrive. Check the status of your Withdrawal at anytime from your Activity screen.'
+            />
+          ) : (
+            <FormattedMessage
+              id='modals.simplebuy.withdrawal.arrive_description_default'
+              defaultMessage='The funds can take up to 5 business days to arrive. Check the status of your Withdrawal at anytime from your Activity screen.'
+            />
+          )}
+        </SubTitle>
+      </RowDisclaimer>
       <FlyoutWrapper>
         <Button
           data-e2e='withdrawCustody'
@@ -128,33 +160,29 @@ const Success: React.FC<InjectedFormProps<WithdrawCheckoutFormValuesType, Props>
             <HeartbeatLoader height='20px' width='20px' color='white' />
           ) : (
             <FormattedMessage
-              id='buttons.withdraw_value'
-              defaultMessage='Withdraw {value}'
-              values={{
-                value: fiatToString({
-                  unit: props.fiatCurrency,
-                  value: props.amount
-                })
-              }}
+              id='modals.simplebuy.withdrawal.withdrawal_button'
+              defaultMessage='Withdraw Now'
             />
           )}
         </Button>
         <Button
-          onClick={() =>
-            props.withdrawActions.setStep({
-              beneficiary: props.beneficiary,
-              fiatCurrency: props.fiatCurrency,
-              step: WithdrawStepEnum.ENTER_AMOUNT
-            })
-          }
-          data-e2e='cancelWithdrawCustody'
-          height='48px'
+          data-e2e='cancelCustody'
+          disabled={props.submitting}
           fullwidth
-          nature='light-red'
+          height='48px'
+          nature='empty-red'
           size='16px'
-          style={{ marginTop: '16px' }}
+          margin='20px 0 0'
+          onClick={props.onClickBack}
         >
-          <FormattedMessage id='buttons.cancel' defaultMessage='Cancel' />
+          {props.submitting ? (
+            <HeartbeatLoader height='20px' width='20px' color='white' />
+          ) : (
+            <FormattedMessage
+              id='modals.simplebuy.withdrawal.cancel_button'
+              defaultMessage='Cancel'
+            />
+          )}
         </Button>
       </FlyoutWrapper>
       {props.error && !props.submitting && (
@@ -166,7 +194,10 @@ const Success: React.FC<InjectedFormProps<WithdrawCheckoutFormValuesType, Props>
   )
 }
 
-export type Props = OwnProps & SuccessStateType & { fees: NabuSymbolNumberType }
+type Props = {
+  fees: any
+  onClickBack: () => void
+} & ConfirmWithdrawProps
 
 export default reduxForm<WithdrawCheckoutFormValuesType, Props>({
   destroyOnUnmount: false,

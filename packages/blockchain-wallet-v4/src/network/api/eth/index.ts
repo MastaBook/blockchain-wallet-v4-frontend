@@ -2,12 +2,19 @@ import * as ethers from 'ethers'
 
 import { AccountTokensBalancesResponseType, EthAccountSummaryType, EthRawTxType } from './types'
 
-export default ({ apiUrl, get, post }) => {
+export default ({ apiUrl, get, openSeaApi, post }) => {
+  // ONLY FOR TESTING OPENSEA!
+  const IS_TESTNET = openSeaApi && openSeaApi.includes('testnets')
+
+  const ethProvider = IS_TESTNET
+    ? new ethers.providers.EtherscanProvider('rinkeby', '5PZU5W8MYTB61C8Z5E3BRJPCIW63BFPBJ8')
+    : // : ethers.providers.getDefaultProvider(`${apiUrl}/eth/nodes/rpc`)
+      // temp solution is to use prod URL
+      ethers.providers.getDefaultProvider(`https://api.blockchain.info/eth/nodes/rpc`)
+
   //
   // Deprecate
   //
-
-  const ethProvider = ethers.providers.getDefaultProvider(`${apiUrl}/eth/nodes/rpc`)
 
   // web3.eth.getBalance
   const getEthBalances = (context) =>
@@ -25,12 +32,21 @@ export default ({ apiUrl, get, post }) => {
 
   // https://docs.ethers.io/v5/api/providers/provider/#Provider-getGasPrice
   const getEthFees = (contractAddress) => {
-    const baseUrl = '/mempool/fees/eth'
+    const baseUrl = '/currency/evm/fees/ETH'
     return get({
-      endPoint: contractAddress ? `${baseUrl}?contractAddress=${contractAddress}` : baseUrl,
+      endPoint: contractAddress ? `${baseUrl}?identifier=${contractAddress}` : baseUrl,
       ignoreQueryParams: true,
       url: apiUrl
-    })
+    }).then((response) => ({
+      gasLimit: parseInt(response.gasLimit, 10),
+      gasLimitContract: parseInt(response.gasLimitContract, 10),
+      limits: {
+        max: Math.round(parseInt(response.LIMITS.max, 10) / 1e9),
+        min: Math.round(parseInt(response.LIMITS.min, 10) / 1e9)
+      },
+      priority: Math.round(parseInt(response.NORMAL, 10) / 1e9),
+      regular: Math.round(parseInt(response.LOW, 10) / 1e9)
+    }))
   }
 
   // https://docs.ethers.io/v5/api/providers/provider/#Provider-sendTransaction

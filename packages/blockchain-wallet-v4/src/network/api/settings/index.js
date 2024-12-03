@@ -1,4 +1,4 @@
-export default ({ post, rootUrl }) => {
+export default ({ authorizedPut, nabuUrl, post, rootUrl }) => {
   const getSettings = (guid, sharedKey) =>
     post({
       data: { format: 'json', guid, method: 'get-info', sharedKey },
@@ -13,8 +13,41 @@ export default ({ post, rootUrl }) => {
       url: rootUrl
     })
 
+  const updateSettingsAuthorized = (
+    guid,
+    sharedKey,
+    method,
+    payload,
+    nabuSessionToken,
+    querystring = ''
+  ) =>
+    post({
+      data: {
+        guid,
+        length: `${payload}`.length,
+        method,
+        nabuSessionToken,
+        payload,
+        sharedKey
+      },
+      endPoint: querystring ? `/wallet?${querystring}` : '/wallet',
+      url: rootUrl
+    })
+
+  const secureUpdateEmail = (guid, sharedKey, email, nabuSessionToken) =>
+    updateSettingsAuthorized(guid, sharedKey, 'secure-update-email', email, nabuSessionToken)
+
+  const secureUpdateMobile = (guid, sharedKey, mobile, nabuSessionToken) =>
+    updateSettingsAuthorized(guid, sharedKey, 'secure-update-sms', mobile, nabuSessionToken)
+
+  // leaving old unsecured enpoints in because above is wrapped in feature flag
+  // in case somethig needs to be rolled back
+
   const updateEmail = (guid, sharedKey, email) =>
     updateSettings(guid, sharedKey, 'update-email', email)
+
+  const updateMobile = (guid, sharedKey, email) =>
+    updateSettings(guid, sharedKey, 'update-sms', email)
 
   const sendConfirmationCodeEmail = (guid, sharedKey, email) =>
     updateSettings(guid, sharedKey, 'send-verify-email-mail', email)
@@ -27,9 +60,6 @@ export default ({ post, rootUrl }) => {
 
   const verifyEmail = (guid, sharedKey, code) =>
     updateSettings(guid, sharedKey, 'verify-email-code', code)
-
-  const updateMobile = (guid, sharedKey, mobile) =>
-    updateSettings(guid, sharedKey, 'update-sms', mobile)
 
   const verifyMobile = (guid, sharedKey, code) =>
     updateSettings(guid, sharedKey, 'verify-sms', code)
@@ -79,6 +109,14 @@ export default ({ post, rootUrl }) => {
   const updateNotificationsType = (guid, sharedKey, value) =>
     updateSettings(guid, sharedKey, 'update-notifications-type', value)
 
+  const updateCommunicationLanguage = (language) =>
+    authorizedPut({
+      contentType: 'application/json',
+      data: { language },
+      endPoint: '/users/current/lang',
+      url: nabuUrl
+    })
+
   return {
     enableGoogleAuthenticator,
     enableNotifications,
@@ -86,11 +124,14 @@ export default ({ post, rootUrl }) => {
     getGoogleAuthenticatorSecretUrl,
     getSettings,
     resendVerifyEmail,
+    secureUpdateEmail,
+    secureUpdateMobile,
     sendConfirmationCodeEmail,
     sendEmailConfirmation,
     updateAuthType,
     updateAuthTypeNeverSave,
     updateBlockTorIps,
+    updateCommunicationLanguage,
     updateCurrency,
     updateEmail,
     updateHint,

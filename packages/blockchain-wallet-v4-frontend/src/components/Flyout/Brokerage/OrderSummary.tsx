@@ -1,12 +1,24 @@
-import React from 'react'
+import React, { useCallback, useEffect, useMemo } from 'react'
 import { FormattedMessage } from 'react-intl'
-import moment from 'moment'
+import { useSelector } from 'react-redux'
+import { intervalToDuration } from 'date-fns'
+import { isEmpty } from 'ramda'
 import styled from 'styled-components'
 
-import { BSOrderStateType, BSPaymentTypes, OrderType } from '@core/types'
+import {
+  BSOrderStateType,
+  BSPaymentTypes,
+  EarnEligibleType,
+  OrderType,
+  RewardsRatesType
+} from '@core/types'
 import { Button, Icon, Link, Text } from 'blockchain-info-components'
+import { getData } from 'components/Banner/selectors'
+import { duration } from 'components/Flyout'
+import { actions } from 'data'
+import { Analytics } from 'data/types'
 
-import Container from '../Container'
+import FlyoutContainer from '../Container'
 import Content from '../Content'
 import Footer from '../Footer'
 import Header from '../Header'
@@ -33,7 +45,7 @@ const IconWrapper = styled.div`
   justify-content: center;
 `
 const TitleWrapper = styled(Text)`
-  margin: 32px 0 24px 0;
+  padding: 2rem 0 1.5rem 0;
   width: 100%;
 `
 const BottomInfo = styled(Bottom)`
@@ -48,10 +60,23 @@ const BottomPromo = styled.div`
   justify-content: flex-end;
   flex-direction: column;
   height: 180px;
-  margin-bottom: 15px;
+  margin-bottom: 1rem;
+`
+
+const SecondaryInfoText = styled.div`
+  margin-top: 1.5rem;
+`
+
+const StyledDoneButton = styled(Button)`
+  margin-top: 1rem;
+`
+
+const StyledEarnButton = styled(Button)`
+  margin-top: 1.5rem;
 `
 
 const OrderSummary: React.FC<Props> = ({
+  analyticsActions,
   baseAmount,
   baseCurrency,
   children,
@@ -61,6 +86,9 @@ const OrderSummary: React.FC<Props> = ({
   handleClose,
   handleCompleteButton,
   handleOkButton,
+  interestActions,
+  interestEligible,
+  interestRates,
   lockTime,
   orderState,
   orderType,
@@ -72,14 +100,54 @@ const OrderSummary: React.FC<Props> = ({
   const isPendingAch = isPendingDeposit && paymentType === BSPaymentTypes.BANK_TRANSFER
   const isTransactionPending = isPendingDeposit && paymentState === 'WAITING_FOR_3DS_RESPONSE'
 
-  const days = moment.duration(lockTime, 'seconds').days()
+  const { days } = intervalToDuration({ end: lockTime, start: 0 })
+
+  const isUserFromUK = useSelector(getData)?.country === 'GB'
+
+  // Getting the interest rate for the coin that was bought
+  const coinInterestRate = !!interestRates[outputCurrency] && interestRates[outputCurrency]
+
+  const isInterestEligibleCoin = useMemo(
+    () =>
+      !isEmpty(interestEligible) &&
+      orderState === 'FINISHED' &&
+      interestEligible[outputCurrency] &&
+      interestEligible[outputCurrency]?.eligible,
+    [interestEligible, outputCurrency, orderState]
+  )
+
+  const handleEarnRewardsButton = useCallback(() => {
+    handleClose()
+    setTimeout(() => {
+      interestActions.showInterestModal({
+        coin: outputCurrency,
+        step: 'ACCOUNT_SUMMARY'
+      })
+    }, duration)
+    analyticsActions.trackEvent({
+      key: Analytics.WALLET_BUY_EARN_REWARDS_CLICKED,
+      properties: {}
+    })
+  }, [outputCurrency, handleClose])
+
+  useEffect(() => {
+    if (isInterestEligibleCoin) {
+      analyticsActions.trackEvent({
+        key: Analytics.WALLET_BUY_EARN_REWARDS_VIEWED,
+        properties: {}
+      })
+    }
+  }, [outputCurrency])
+
   return (
-    <Container>
+    <FlyoutContainer>
       <Header data-e2e='sbCloseModalIcon' mode='close' onClick={handleClose} />
       <Content mode='middle'>
         <div style={{ padding: '0 77px', textAlign: 'center' }}>
           <IconWrapper>
-            <Icon color={outputCurrency} name={outputCurrency} size='64px' />
+            <div style={{ height: 64, width: 64 }}>
+              <Icon name={outputCurrency} size='64px' style={{ position: 'absolute' }} />
+            </div>
 
             {orderState === 'FINISHED' ? (
               <IconBackground color='white'>
@@ -130,13 +198,43 @@ const OrderSummary: React.FC<Props> = ({
 
             <Text size='14px' weight={500} color='grey600' style={{ marginTop: '8px' }}>
               {orderState === 'FINISHED' && (
-                <FormattedMessage
-                  id='modals.simplebuy.transferdetails.available1'
-                  defaultMessage='Your {coin} is now available in your Trading Account.'
-                  values={{
-                    coin: baseCurrency
-                  }}
-                />
+                <>
+                  <FormattedMessage
+                    id='modals.simplebuy.transferdetails.available1'
+                    defaultMessage='Your {coin} is now available in your Trading Account.'
+                    values={{
+                      coin: baseCurrency
+                    }}
+                  />
+
+                  {isInterestEligibleCoin && (
+                    <SecondaryInfoText>
+                      <FormattedMessage
+                        id='copy.swap_earn_paragraph'
+                        defaultMessage="Don't keep it waiting, earn up to {rate}% on it with our Rewards Program"
+                        values={{
+                          rate: coinInterestRate
+                        }}
+                      />
+
+                      {isUserFromUK && (
+                        <SecondaryInfoText>
+                          APYs are always indicative based on past performance and are not
+                          guaranteed. Find out more about Staking and Rewards as well as the risks{' '}
+                          <Link
+                            size='12px'
+                            href='https://support.blockchain.com/hc/en-us/articles/10857163796380-Staking-and-Rewards-what-are-the-risks'
+                            target='_blank'
+                            style={{ textDecoration: 'underline' }}
+                          >
+                            here
+                          </Link>
+                          .
+                        </SecondaryInfoText>
+                      )}
+                    </SecondaryInfoText>
+                  )}
+                </>
               )}
               {orderState === 'FAILED' && (
                 <>
@@ -176,9 +274,10 @@ const OrderSummary: React.FC<Props> = ({
               <Text size='14px' weight={500} color='grey600' style={{ marginTop: '8px' }}>
                 <FormattedMessage
                   id='modals.simplebuy.recurringbuy.success'
-                  defaultMessage='We will buy {amount} of Bitcoin {frequency} at that moment’s market price. Cancel this recurring buy at anytime.'
+                  defaultMessage='We will buy {amount} of {coin} {frequency} at that moment’s market price. Cancel this recurring buy at anytime.'
                   values={{
                     amount: `${currencySymbol}${counterAmount}`,
+                    coin: outputCurrency,
                     frequency: frequencyText
                   }}
                 />
@@ -205,28 +304,39 @@ const OrderSummary: React.FC<Props> = ({
             (paymentType === BSPaymentTypes.PAYMENT_CARD ||
               paymentType === BSPaymentTypes.USER_CARD) && (
               <BottomInfo>
-                <Text color='grey600' size='14px' weight={500}>
-                  <FormattedMessage
-                    id='modals.simplebuy.summary.complete_card_info_main'
-                    defaultMessage='Your final amount might change due to market activity. For security purposes, a {days} day holding period will be applied to your funds. You can Sell or Swap during this time. We will notify you once the funds are available to be withdrawn.'
-                    values={{ days }}
-                  />
-                </Text>
-                <Text color='grey600' size='14px' weight={500} style={{ marginTop: '16px' }}>
-                  <span>
+                {days === 0 ? (
+                  <Text size='12px' weight={500} color='grey900'>
                     <FormattedMessage
-                      id='modals.simplebuy.summary.complete_card_info_additional'
-                      defaultMessage='In the meantime, you can sell into Cash, swap, and trade within Blockchain.com.'
-                    />{' '}
-                    <a
-                      href='https://support.blockchain.com/hc/en-us/articles/360048200392'
-                      rel='noopener noreferrer'
-                      target='_blank'
-                    >
-                      <FormattedMessage id='copy.learn_more' defaultMessage='Learn more' />
-                    </a>
-                  </span>
-                </Text>
+                      id='modals.simplebuy.confirm.activity'
+                      defaultMessage='Your final amount may change due to market activity.'
+                    />
+                  </Text>
+                ) : (
+                  <>
+                    <Text color='grey600' size='14px' weight={500}>
+                      <FormattedMessage
+                        id='modals.simplebuy.summary.complete_card_info_main'
+                        defaultMessage='Your final amount might change due to market activity. For security purposes, a {days} day holding period will be applied to your funds. You can Sell or Swap during this time. We will notify you once the funds are available to be withdrawn.'
+                        values={{ days }}
+                      />
+                    </Text>
+                    <Text color='grey600' size='14px' weight={500} style={{ marginTop: '16px' }}>
+                      <span>
+                        <FormattedMessage
+                          id='modals.simplebuy.summary.complete_card_info_additional'
+                          defaultMessage='In the meantime, you can sell into cash, swap, and trade within Blockchain.com.'
+                        />{' '}
+                        <a
+                          href='https://support.blockchain.com/hc/en-us/articles/360048200392'
+                          rel='noopener noreferrer'
+                          target='_blank'
+                        >
+                          <FormattedMessage id='copy.learn_more' defaultMessage='Learn more' />
+                        </a>
+                      </span>
+                    </Text>
+                  </>
+                )}
               </BottomInfo>
             )}
           {orderType === 'BUY' &&
@@ -254,28 +364,55 @@ const OrderSummary: React.FC<Props> = ({
             )}
         </div>
       </Content>
-      <Footer>
+      <Footer collapsed>
         {children && <BottomPromo>{children}</BottomPromo>}
 
-        {orderType === 'BUY' && orderState !== 'FAILED' && (
-          <Button
-            fullwidth
-            data-e2e='sbDone'
-            size='16px'
-            height='48px'
-            nature='primary'
-            onClick={handleOkButton}
-            style={{ marginBottom: '16px' }}
-          >
-            <FormattedMessage id='buttons.ok' defaultMessage='OK' />
-          </Button>
+        {!isInterestEligibleCoin ? (
+          orderType === 'BUY' &&
+          orderState !== 'FAILED' && (
+            <Button
+              fullwidth
+              data-e2e='sbDone'
+              size='16px'
+              height='48px'
+              nature='primary'
+              onClick={handleOkButton}
+            >
+              <FormattedMessage id='buttons.ok' defaultMessage='OK' />
+            </Button>
+          )
+        ) : (
+          <>
+            <StyledEarnButton
+              data-e2e='swapEarn'
+              nature='primary'
+              fullwidth
+              jumbo
+              onClick={handleEarnRewardsButton}
+            >
+              <FormattedMessage
+                id='modals.tradinglimits.earn_interest'
+                defaultMessage='Earn Rewards'
+              />
+            </StyledEarnButton>
+            <StyledDoneButton
+              data-e2e='swapDone'
+              nature='white-blue'
+              fullwidth
+              jumbo
+              onClick={handleOkButton}
+            >
+              <FormattedMessage id='buttons.ok' defaultMessage='OK' />
+            </StyledDoneButton>
+          </>
         )}
       </Footer>
-    </Container>
+    </FlyoutContainer>
   )
 }
 
 export type Props = {
+  analyticsActions: typeof actions.analytics
   baseAmount: string
   baseCurrency: string
   children?: React.ReactNode
@@ -285,6 +422,9 @@ export type Props = {
   handleClose: () => void
   handleCompleteButton?: () => void
   handleOkButton: () => void
+  interestActions: typeof actions.components.interest
+  interestEligible: EarnEligibleType
+  interestRates: RewardsRatesType['rates']
   lockTime: number
   orderState: BSOrderStateType
   orderType: OrderType

@@ -24,7 +24,7 @@ const InnerSpacedRow = styled(SpacedRow)`
   }
 `
 
-export const OnHold = (props: Props) => {
+const WithdrawalLockHold = (props: Props) => {
   return (
     <OuterSpacedRow reversed={props.mode === 'tooltip'}>
       <Text color='grey900' size='14px' weight={500}>
@@ -51,8 +51,8 @@ export const OnHold = (props: Props) => {
           </TooltipHost>
           <Tooltip id='onhold_tooltip' place='bottom'>
             <FormattedMessage
-              id='modals.brokerage.withdraw_holding_period'
-              defaultMessage='Newly added funds are subject to a holding period. You can transfer between your Trading, Rewards, and Exchange accounts in the meantime.'
+              id='modals.brokerage.withdraw_holding_period_1'
+              defaultMessage='Newly added funds are subject to a holding period. You can transfer between your Trading, Earn, and Exchange accounts in the meantime.'
             />
           </Tooltip>
         </InnerSpacedRow>
@@ -64,4 +64,4 @@ export const OnHold = (props: Props) => {
 export type Props = WithdrawalLockResponseType['totalLocked'] &
   ({ mode: 'tooltip' } | { handleClick: () => void; mode: 'flyout' })
 
-export default memo(OnHold)
+export default memo(WithdrawalLockHold)

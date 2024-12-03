@@ -15,6 +15,7 @@ import {
 
 const ConfirmWrapper = styled(Wrapper)`
   padding: 0px;
+  min-width: 100%;
 `
 const SummaryExchangeAmount = styled(ExchangeAmount)`
   justify-content: flex-end;
@@ -48,9 +49,9 @@ const Success = (props) => {
     description,
     fee,
     fromAddress,
-    fromType,
     handleBack,
     handleSubmit,
+    isCustodial,
     submitting,
     toAddress,
     totalCrypto,
@@ -106,16 +107,20 @@ const Success = (props) => {
         </LargeTableRow>
         <LargeTableRow>
           <Text size='16px' weight={500}>
-            <FormattedMessage id='modals.sendeth.secondstep.fee' defaultMessage='Fee:' />
+            {isCustodial ? (
+              <FormattedMessage id='copy.processing-fee' defaultMessage='Processing Fee:' />
+            ) : (
+              <FormattedMessage id='copy.network-fee' defaultMessage='Network Fee:' />
+            )}
           </Text>
           <ExchangeAmounts>
             <SummaryExchangeAmount>
-              <FiatDisplay size='16px' weight={500} coin={fromType === 'CUSTODIAL' ? coin : 'ETH'}>
+              <FiatDisplay size='16px' weight={500} coin={isCustodial ? coin : 'ETH'}>
                 {fee}
               </FiatDisplay>
             </SummaryExchangeAmount>
             <SummarySubExchangeAmount>
-              <CoinDisplay size='14px' weight={300} coin={fromType === 'CUSTODIAL' ? coin : 'ETH'}>
+              <CoinDisplay size='14px' weight={300} coin={isCustodial ? coin : 'ETH'}>
                 {fee}
               </CoinDisplay>
             </SummarySubExchangeAmount>

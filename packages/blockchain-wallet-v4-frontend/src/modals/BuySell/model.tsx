@@ -1,5 +1,6 @@
-import React from 'react'
+import React, { FC, ReactNode, useState } from 'react'
 import { FormattedMessage } from 'react-intl'
+import { Button, Padding, Text } from '@blockchain-com/constellation'
 
 import { fiatToString } from '@core/exchange/utils'
 import {
@@ -8,12 +9,19 @@ import {
   BSOrderType,
   BSPaymentTypes,
   CoinType,
-  FiatType
+  FiatType,
+  MobilePaymentType
 } from '@core/types'
-import { Link, Text, TextGroup } from 'blockchain-info-components'
-import { getBaseCurrency, getCounterCurrency, getOrderType } from 'data/components/buySell/model'
+import { Link, TextGroup } from 'blockchain-info-components'
+import { getCounterCurrency } from 'data/components/buySell/model'
 import { convertBaseToStandard } from 'data/components/exchange/services'
 import { BankTransferAccountType } from 'data/types'
+
+const defaultBankInfo = {
+  accountNumber: '',
+  bankAccountType: '',
+  bankName: 'Bank Transfer'
+}
 
 export const ErrorCodeMappings = ({ code }: { code: number | string }) => {
   switch (code) {
@@ -87,10 +95,17 @@ export const ErrorCodeMappings = ({ code }: { code: number | string }) => {
           defaultMessage='Destination amount is negative'
         />
       )
+    case 165:
+      return (
+        <FormattedMessage
+          id='error.sanctioned_country'
+          defaultMessage='You are not eligible to perform requested operation because you are from a sanctioned country or state'
+        />
+      )
     default:
       // If the error form the api is a string like a `description` or `message` just pipe it to the
       // UI else if its a numeric code that's not supported here show a default error message
-      return typeof code === 'string' ? (
+      return typeof code === 'string' && code !== '{}' ? (
         <Text>{code}</Text>
       ) : (
         <FormattedMessage id='copy.unkown_error' defaultMessage='An unknown error has occurred.' />
@@ -131,44 +146,37 @@ export const BuyOrSell = (props: {
   )
 }
 
-export const getOrderDestination = (order: BSOrderType) => {
-  const orderType = getOrderType(order)
-  const baseCurrency = getBaseCurrency(order)
-  const counterCurrency = getCounterCurrency(order)
+export const getPaymentMethod = ({
+  bankAccount,
+  fiatCode,
+  mobilePaymentMethod,
+  paymentType
+}: {
+  bankAccount: BankTransferAccountType
+  fiatCode: string
+  mobilePaymentMethod?: MobilePaymentType
+  paymentType: BSPaymentTypes | undefined
+}) => {
+  if (mobilePaymentMethod === MobilePaymentType.APPLE_PAY) {
+    return <FormattedMessage id='buttons.apple_pay' defaultMessage='Apple Pay' />
+  }
 
-  return orderType === 'BUY' ? `${baseCurrency} Trading Account` : `${counterCurrency} Account`
-}
+  if (mobilePaymentMethod === MobilePaymentType.GOOGLE_PAY) {
+    return <FormattedMessage id='buttons.google_pay' defaultMessage='Google Pay' />
+  }
 
-export const getPaymentMethod = (order: BSOrderType, bankAccount: BankTransferAccountType) => {
-  const baseCurrency = getBaseCurrency(order)
-  const counterCurrency = getCounterCurrency(order)
-  const orderType = getOrderType(order)
-
-  switch (order.paymentType) {
+  switch (paymentType) {
     case BSPaymentTypes.PAYMENT_CARD:
       return (
         <FormattedMessage id='modals.simplebuy.confirm.payment_card' defaultMessage='Credit Card' />
       )
     case BSPaymentTypes.FUNDS:
-      return orderType === 'BUY' ? (
-        <FormattedMessage
-          id='modals.simplebuy.confirm.funds_wallet'
-          defaultMessage='{coin} Wallet'
-          values={{
-            coin: counterCurrency
-          }}
-        />
-      ) : (
-        `${baseCurrency} Trading Account`
-      )
+      return window.coins[fiatCode]?.coinfig.name ?? fiatCode
+
     case BSPaymentTypes.BANK_TRANSFER:
-      const defaultBankInfo = {
-        accountNumber: '',
-        bankAccountType: '',
-        bankName: 'Bank Transfer'
-      }
-      const d = (bankAccount && bankAccount.details) || defaultBankInfo
-      return `${d.bankName}`
+      const effectiveBankAccount = (bankAccount && bankAccount.details) || defaultBankInfo
+
+      return effectiveBankAccount.bankName
     default:
       return (
         <FormattedMessage
@@ -188,40 +196,130 @@ export const displayFiat = (order: BSOrderType, amt: string) => {
   })
 }
 
-export const getPaymentMethodDetails = (
-  order: BSOrderType,
-  bankAccount: BankTransferAccountType,
+export const getPaymentMethodDetails = ({
+  bankAccount,
+  cardDetails,
+  paymentType
+}: {
+  bankAccount: BankTransferAccountType
   cardDetails: BSCardType | null
-) => {
-  switch (order.paymentType) {
+  paymentType: BSPaymentTypes | undefined
+}) => {
+  switch (paymentType) {
     case BSPaymentTypes.PAYMENT_CARD:
-      return `${cardDetails?.card?.type || ''} ${cardDetails?.card?.number || ''}`
+      return `${cardDetails?.card?.type || ''} ***${cardDetails?.card?.number || ''}`
     case BSPaymentTypes.BANK_TRANSFER:
-      const defaultBankInfo = {
-        accountNumber: '',
-        bankAccountType: '',
-        bankName: 'Bank Transfer'
-      }
-      const d = (bankAccount && bankAccount.details) || defaultBankInfo
-      return `${d.bankAccountType?.toLowerCase() || ''} ${d.accountNumber || ''}`
+      const effectiveBankAccount = (bankAccount && bankAccount.details) || defaultBankInfo
+      return `${effectiveBankAccount.bankName || ''} ****${
+        effectiveBankAccount.accountNumber || ''
+      }`
     default:
       return null
   }
 }
 
-export const getLockRuleMessaging = (
-  showLockRule: boolean,
-  days: number,
+const MoreInfoContainer: FC<{ teaser: ReactNode; text: ReactNode }> = ({ teaser, text }) => {
+  const [isOpen, setIsOpen] = useState(false)
+  const handleClick = (e) => {
+    e.preventDefault()
+    if (isOpen) {
+      setIsOpen(false)
+    } else {
+      setIsOpen(true)
+    }
+  }
+  return (
+    <>
+      <Padding bottom={1}>
+        <Text as='p' variant='caption1'>
+          {teaser}
+        </Text>
+      </Padding>
+      {isOpen && (
+        <Text as='p' variant='caption1'>
+          {text}
+        </Text>
+      )}
+      <Button
+        as='button'
+        onClick={handleClick}
+        size='small'
+        state='initial'
+        text={isOpen ? 'Read Less' : 'Read More'}
+        type='button'
+        variant='minimal'
+        width='auto'
+      />
+    </>
+  )
+}
+
+export const getLockRuleMessaging = ({
+  coin,
+  days,
+  paymentAccount,
+  paymentType,
+  quoteRate,
+  showLockRule,
+  totalAmount,
+  withdrawalLockDays
+}: {
+  coin: string
+  days: number
+  paymentAccount: string | null
   paymentType?: BSPaymentTypes
-) => {
+  quoteRate: ReactNode
+  showLockRule: boolean
+  totalAmount: string
+  withdrawalLockDays: number
+}) => {
   switch (paymentType) {
     case BSPaymentTypes.BANK_TRANSFER:
+      return (
+        <MoreInfoContainer
+          teaser={
+            <FormattedMessage
+              id='modals.simplebuy.confirm.by_placing_this_order'
+              defaultMessage='By placing this order, you authorize Blockchain.com, Inc. to debit {totalAmount} from your bank account for a {coin} purchase at a quoted price of {quoteRate}.'
+              values={{ coin, quoteRate, totalAmount }}
+            />
+          }
+          text={
+            <>
+              <Padding bottom={1}>
+                <FormattedMessage
+                  id='modals.simplebuy.confirm.you_authorize_blockchain'
+                  defaultMessage='You authorize Blockchain.com, Inc. to debit your {paymentAccount} account for up to {totalAmount} via Bank Transfer (ACH) and, if necessary, to initiate credit entries/adjustments for any debits made in error to your account at the financial institution where you hold your account. You acknowledge that the origination of ACH transactions to your account complies with the provisions of U.S. law. You agree that this authorization cannot be revoked. The debit will post to your bank account within 1-2 business days of you authorizing this transfer.'
+                  values={{ paymentAccount, totalAmount }}
+                />
+              </Padding>
+              <Padding bottom={1}>
+                <FormattedMessage
+                  id='modals.simplebuy.confirm.your_deposit_will_be_credited'
+                  defaultMessage='Your deposit will be credited to your Blockchain.com account within 0-4 business days at the rate shown at the time of your purchase. You can withdraw these funds from your Blockchain.com account {withdrawalLockDays} days after Blockchain.com receives funds from your financial institution.'
+                  values={{ withdrawalLockDays }}
+                />
+              </Padding>
+            </>
+          }
+        />
+      )
     case BSPaymentTypes.PAYMENT_CARD:
     case BSPaymentTypes.USER_CARD:
+      if (days === 0) {
+        return (
+          <Text as='p' variant='caption1'>
+            <FormattedMessage
+              id='modals.simplebuy.confirm.activity'
+              defaultMessage='Your final amount may change due to market activity.'
+            />
+          </Text>
+        )
+      }
       if (showLockRule) {
         return (
           <TextGroup inline>
-            <Text size='12px' weight={500} color='grey900'>
+            <Text as='p' variant='caption1'>
               <FormattedMessage
                 id='modals.simplebuy.summary.complete_card_info_main'
                 defaultMessage='Your final amount might change due to market activity. For security purposes, a {days} day holding period will be applied to your funds. You can Sell or Swap during this time. We will notify you once the funds are available to be withdrawn.'
@@ -243,7 +341,7 @@ export const getLockRuleMessaging = (
         )
       }
       return (
-        <Text size='12px' weight={500} color='grey900'>
+        <Text as='p' variant='caption1'>
           <FormattedMessage
             id='modals.simplebuy.confirm.activity_card11'
             defaultMessage='Your final amount might change due to market activity. Your funds will be available to Sell, Swap or withdraw instantly.'
@@ -255,7 +353,7 @@ export const getLockRuleMessaging = (
     case BSPaymentTypes.FUNDS:
     default:
       return (
-        <Text size='12px' weight={500} color='grey900'>
+        <Text as='p' variant='caption1'>
           <FormattedMessage
             id='modals.simplebuy.confirm.activity'
             defaultMessage='Your final amount may change due to market activity.'

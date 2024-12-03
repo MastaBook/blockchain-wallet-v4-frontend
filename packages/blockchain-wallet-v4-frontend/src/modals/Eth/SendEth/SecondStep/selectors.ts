@@ -1,5 +1,5 @@
 import BigNumber from 'bignumber.js'
-import { curry, equals, lift, prop } from 'ramda'
+import { curry, equals, lift } from 'ramda'
 
 import { Exchange } from '@core'
 import { fiatToString } from '@core/exchange/utils'
@@ -14,11 +14,6 @@ const ethFromLabel = curry((payment, state) => {
   switch (from.type) {
     case ADDRESS_TYPES.ACCOUNT:
       return selectors.core.kvStore.eth.getAccountLabel(state, from.address).getOrElse(from.address)
-    case ADDRESS_TYPES.LOCKBOX:
-      return selectors.core.kvStore.lockbox
-        .getLockboxEthAccount(state, from.address)
-        .map(prop('label'))
-        .getOrElse(from.address)
     default:
       return from.address
   }
@@ -29,7 +24,7 @@ const erc20FromLabel = curry((coin, payment) => {
   const { coinfig } = window.coins[coin]
   switch (from.type) {
     case ADDRESS_TYPES.ACCOUNT:
-      return `${coinfig.displaySymbol} Private Key Wallet`
+      return `${coinfig.displaySymbol} DeFi Wallet`
     default:
       return from.address
   }
@@ -77,7 +72,7 @@ export const getData = (state, coin) => {
       description: payment.description,
       fee: payment.fee,
       fromAddress: fromLabel,
-      fromType: payment.from.type,
+      isCustodial: payment.from.type === ADDRESS_TYPES.CUSTODIAL,
       submitting: isSubmitting(state),
       toAddress: payment.to.label || payment.to.address,
       // @ts-ignore

@@ -2,8 +2,9 @@
 import { concat, curry, reduce, sequence } from 'ramda'
 
 import { Exchange, Remote } from '@core'
+import { getBalance } from '@core/redux/data/coins/selectors'
 import { ADDRESS_TYPES } from '@core/redux/payment/btc/utils'
-import { InterestAccountBalanceType } from '@core/types'
+import { EarnAccountBalanceResponseType } from '@core/types'
 import { selectors } from 'data'
 
 export const getData = (
@@ -14,10 +15,16 @@ export const getData = (
     includeCustodial?: boolean
     includeExchangeAddress?: boolean
     includeInterest?: boolean
+    includeSelfCustody?: boolean
   }
 ) => {
-  const { /* exclude = [], */ coin, includeCustodial, includeExchangeAddress, includeInterest } =
-    ownProps
+  const {
+    /* exclude = [], */ coin,
+    includeCustodial,
+    includeExchangeAddress,
+    includeInterest,
+    includeSelfCustody
+  } = ownProps
 
   const buildCustodialDisplay = (x) => {
     return (
@@ -29,7 +36,17 @@ export const getData = (
     )
   }
 
-  const buildInterestDisplay = (account: InterestAccountBalanceType[string]) => {
+  const buildSelfCustodyDisplay = (x) => {
+    return (
+      `Private Key` +
+      ` (${Exchange.displayCoinToCoin({
+        coin,
+        value: x || 0
+      })})`
+    )
+  }
+
+  const buildInterestDisplay = (account: EarnAccountBalanceResponseType[string]) => {
     return (
       `Rewards Account` +
       ` (${Exchange.displayCoinToCoin({
@@ -50,6 +67,12 @@ export const getData = (
         label: 'Trading Account',
         type: ADDRESS_TYPES.CUSTODIAL
       }
+    }
+  ]
+  const toSelfCustodyDropdown = (balance) => [
+    {
+      label: buildSelfCustodyDisplay(balance),
+      value: { balance, label: 'Private Key', type: ADDRESS_TYPES.ACCOUNT }
     }
   ]
   const toInterestDropdown = (account) =>
@@ -80,15 +103,18 @@ export const getData = (
           .map(toCustodialDropdown)
           .map(toGroup('Custodial Wallet'))
       : Remote.of([]),
+    includeSelfCustody
+      ? getBalance(coin, state).map(toSelfCustodyDropdown).map(toGroup('Private Key'))
+      : Remote.of([]),
     includeInterest
       ? selectors.components.interest
-          .getInterestAccountBalance(state)
+          .getPassiveRewardsAccountBalance(state)
           .map((x) => x[coin])
           .map(toInterestDropdown)
           .map(toGroup('Rewards Account'))
       : Remote.of([])
-  ]).map(([b1, b2, b3]) => ({
+  ]).map(([b1, b2, b3, b4]) => ({
     // @ts-ignore
-    data: reduce(concat, [], [b1, b2, b3])
+    data: reduce(concat, [], [b1, b2, b3, b4])
   }))
 }

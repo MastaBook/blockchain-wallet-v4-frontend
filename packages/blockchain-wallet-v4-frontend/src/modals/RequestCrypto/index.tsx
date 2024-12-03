@@ -6,7 +6,7 @@ import { InjectedFormProps, reduxForm } from 'redux-form'
 import { CoinType, FiatType, WalletCurrencyType } from '@core/types'
 import Flyout, { duration, FlyoutChild } from 'components/Flyout'
 import { actions, selectors } from 'data'
-import { ModalName } from 'data/types'
+import { ModalName, SwapAccountType } from 'data/types'
 import modalEnhancer from 'providers/ModalEnhancer'
 
 import { ModalPropsType } from '../types'
@@ -28,6 +28,7 @@ class RequestCrypto extends PureComponent<Props, State> {
   componentDidMount() {
     // eslint-disable-next-line
     this.setState({ show: true })
+    this.props.custodialActions.fetchProductEligibilityForUser()
   }
 
   componentWillUnmount() {
@@ -105,7 +106,9 @@ const mapStateToProps = (state, ownProps): LinkStatePropsType => {
     initialValues: {
       coinSearch,
       currencyDisplay,
-      step: RequestSteps.COIN_SELECT
+      selectedAccount: ownProps?.account,
+      step:
+        ownProps?.account && ownProps?.coin ? RequestSteps.SHOW_ADDRESS : RequestSteps.COIN_SELECT
     },
     requestableCoins: getData(),
     walletCurrency: currencyDisplay
@@ -113,6 +116,7 @@ const mapStateToProps = (state, ownProps): LinkStatePropsType => {
 }
 
 const mapDispatchToProps = (dispatch) => ({
+  custodialActions: bindActionCreators(actions.custodial, dispatch),
   formActions: bindActionCreators(actions.form, dispatch)
 })
 
@@ -121,12 +125,13 @@ const connector = connect(mapStateToProps, mapDispatchToProps)
 type State = {
   show: boolean
 }
-type OwnProps = ModalPropsType & { coin?: CoinType }
+type OwnProps = ModalPropsType & { account?: SwapAccountType; coin?: CoinType }
 type LinkStatePropsType = {
   formValues: RequestFormType
   initialValues: {
     coinSearch?: string
     currencyDisplay: WalletCurrencyType
+    selectedAccount: SwapAccountType
     step: RequestSteps
   }
   requestableCoins: Array<string>
@@ -138,7 +143,7 @@ export type Props = OwnProps &
   ConnectedProps<typeof connector>
 
 // 👋 Order of composition is important, do not change!
-const enhance = compose<any>(
+const enhance = compose<React.ComponentType>(
   modalEnhancer(ModalName.REQUEST_CRYPTO_MODAL, { transition: duration }),
   connector,
   reduxForm({

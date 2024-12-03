@@ -37,7 +37,8 @@ class AutosizeTextBox extends React.Component {
       maxLength,
       meta,
       noLastPass,
-      placeholder
+      placeholder,
+      pointerToLeft
     } = this.props
     const { active, error, initial, touched, warning } = meta
     const errorState = getErrorState(meta)
@@ -57,6 +58,7 @@ class AutosizeTextBox extends React.Component {
           center={center}
           noLastPass={noLastPass}
           maxLength={maxLength}
+          pointerToLeft={pointerToLeft}
           data-e2e={this.props['data-e2e']}
         />
         {touched && error && !hideError && (

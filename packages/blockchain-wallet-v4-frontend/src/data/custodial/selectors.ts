@@ -14,3 +14,17 @@ export const getDefaultBeneficiary = (currency: WalletCurrencyType, state: RootS
 }
 
 export const getRecentSwapTxs = (state: RootState) => state.custodial.recentSwapTxs
+export const getProductEligibilityForUser = (state: RootState) =>
+  state.custodial.productEligibilityForUser
+
+export const getUserHadNotifications = (state: RootState) => state.custodial.userHadNotifications
+
+export const isKycVerificationEnabled = (state: RootState): boolean => {
+  const kycVerification = state.custodial.productEligibilityForUser.getOrElse({
+    kycVerification: {
+      enabled: true
+    }
+  })
+
+  return kycVerification.kycVerification.enabled
+}

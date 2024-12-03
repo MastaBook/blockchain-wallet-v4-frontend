@@ -4,87 +4,78 @@ import { bindActionCreators, Dispatch } from 'redux'
 
 import { Remote } from '@core'
 import { BSPaymentMethodType } from '@core/network/api/buySell/types'
-import { BSPaymentTypes, CrossBorderLimitsPyload, FiatType, WalletAcountEnum } from '@core/types'
-import { EnterAmount, FlyoutOopsError } from 'components/Flyout'
+import { BSPaymentTypes, CrossBorderLimitsPayload, FiatType, WalletAccountEnum } from '@core/types'
+import { EnterAmount } from 'components/Flyout/Brokerage'
+import { FlyoutOopsError } from 'components/Flyout/Errors'
 import { getDefaultMethod } from 'components/Flyout/model'
 import { actions, selectors } from 'data'
 import { RootState } from 'data/rootReducer'
-import {
-  AddBankStepType,
-  BankDWStepType,
-  BankPartners,
-  BrokerageModalOriginType,
-  BrokerageOrderType
-} from 'data/types'
+import { BankDWStepType, BankPartners, BrokerageOrderType } from 'data/types'
 
 import { Loading, LoadingTextEnum } from '../../../../components'
 import getData from './selectors'
 
-const EnterAmountContainer = (props: Props) => {
+const EnterAmountContainer = ({
+  brokerageActions,
+  buySellActions,
+  data,
+  defaultMethod,
+  fiatCurrency
+}: Props) => {
   useEffect(() => {
-    if (props.fiatCurrency && !Remote.Success.is(props.data)) {
-      props.buySellActions.fetchPaymentMethods(props.fiatCurrency)
-      props.buySellActions.fetchFiatEligible(props.fiatCurrency)
-      props.brokerageActions.fetchBankTransferAccounts()
-      props.buySellActions.fetchSDDEligibility()
+    if (fiatCurrency && !Remote.Success.is(data)) {
+      buySellActions.fetchFiatEligible(fiatCurrency)
+      brokerageActions.fetchBankTransferAccounts()
     }
 
+    buySellActions.fetchPaymentMethods(fiatCurrency)
+
     // fetch crossborder limits
-    props.brokerageActions.fetchCrossBorderLimits({
-      fromAccount: WalletAcountEnum.NON_CUSTODIAL,
-      inputCurrency: props.fiatCurrency,
-      outputCurrency: props.fiatCurrency,
-      toAccount: WalletAcountEnum.CUSTODIAL
-    } as CrossBorderLimitsPyload)
-  }, [props.fiatCurrency])
+    brokerageActions.fetchCrossBorderLimits({
+      fromAccount: WalletAccountEnum.NON_CUSTODIAL,
+      inputCurrency: fiatCurrency,
+      outputCurrency: fiatCurrency,
+      toAccount: WalletAccountEnum.CUSTODIAL
+    } as CrossBorderLimitsPayload)
+  }, [fiatCurrency])
 
   const onSubmit = () => {
     if (
-      props.defaultMethod &&
-      'partner' in props.defaultMethod &&
-      props.defaultMethod.partner === BankPartners.YAPILY
+      defaultMethod &&
+      'partner' in defaultMethod &&
+      defaultMethod.partner === BankPartners.YAPILY
     ) {
-      props.brokerageActions.setDWStep({
+      brokerageActions.setDWStep({
         dwStep: BankDWStepType.AUTHORIZE
       })
     } else {
-      props.brokerageActions.setDWStep({
+      brokerageActions.setDWStep({
         dwStep: BankDWStepType.CONFIRM
       })
     }
   }
 
   const errorCallback = useCallback(() => {
-    props.brokerageActions.setDWStep({
+    brokerageActions.setDWStep({
       dwStep: BankDWStepType.DEPOSIT_METHODS
     })
   }, [])
 
   const handleBack = useCallback(
     () =>
-      props.brokerageActions.setDWStep({
+      brokerageActions.setDWStep({
         dwStep: BankDWStepType.DEPOSIT_METHODS
       }),
     []
   )
 
   const handleChangeMethod = useCallback(() => {
-    props.brokerageActions.setDWStep({
+    brokerageActions.setDWStep({
       dwStep: BankDWStepType.BANK_LIST
     })
   }, [])
 
-  const handleAddMethod = useCallback(() => {
-    props.brokerageActions.showModal({
-      modalType: props.fiatCurrency === 'USD' ? 'ADD_BANK_YODLEE_MODAL' : 'ADD_BANK_YAPILY_MODAL',
-      origin: BrokerageModalOriginType.ADD_BANK_DEPOSIT
-    })
-    props.brokerageActions.setAddBankStep({
-      addBankStep: AddBankStepType.ADD_BANK
-    })
-  }, [props.fiatCurrency])
-
-  return props.data.cata({
+  return data.cata({
     Failure: () => (
       <FlyoutOopsError
         action='retry'
@@ -98,34 +89,33 @@ const EnterAmountContainer = (props: Props) => {
       const isUserEligible =
         val.paymentMethods.methods.length &&
         val.paymentMethods.methods.find((method) => method.limits.max !== '0')
-      const paymentAccount = getDefaultMethod(props.defaultMethod, val.bankTransferAccounts)
-      const paymentMethod = val.paymentMethods.methods.find(
-        (method) =>
+      const paymentAccount = getDefaultMethod(defaultMethod, val.bankTransferAccounts)
+      const paymentMethod = val.paymentMethods.methods.find((method) => {
+        // if a payment account is selected, make sure the payment method matches up so limits are displayed correctly
+        // Also make sure that the payment account currency aligns with the deposit currency in cases where user has
+        // a GBP bank account but is trying to deposit EUR
+        if (paymentAccount && paymentAccount.currency === fiatCurrency) {
+          return paymentAccount.type === method.type
+        }
+        return (
           method.type === BSPaymentTypes.BANK_TRANSFER ||
           method.type === BSPaymentTypes.BANK_ACCOUNT
-      )
-      let handleMethodClick: () => void
+        )
+      })
       const { crossBorderLimits, formErrors } = val
-
-      if (val.bankTransferAccounts.length > 0) {
-        handleMethodClick = handleChangeMethod
-      } else {
-        handleMethodClick = handleAddMethod
-      }
 
       return isUserEligible && paymentMethod ? (
         <EnterAmount
           onSubmit={onSubmit}
-          initialValues={{ currency: props.fiatCurrency }}
-          fiatCurrency={props.fiatCurrency as FiatType}
+          initialValues={{ currency: fiatCurrency }}
+          fiatCurrency={fiatCurrency as FiatType}
           handleBack={handleBack}
-          handleMethodClick={handleMethodClick}
+          handleMethodClick={handleChangeMethod}
           orderType={BrokerageOrderType.DEPOSIT}
           paymentAccount={paymentAccount}
           paymentMethod={paymentMethod}
           crossBorderLimits={crossBorderLimits}
           formErrors={formErrors}
-          formActions={props.formActions}
         />
       ) : (
         <FlyoutOopsError
@@ -140,7 +130,7 @@ const EnterAmountContainer = (props: Props) => {
 
 const mapStateToProps = (state: RootState) => ({
   data: getData(state),
-  defaultMethod: selectors.components.brokerage.getAccount(state),
+  defaultMethod: selectors.components.brokerage.getActiveAccount(state),
   fiatCurrency: selectors.components.brokerage.getFiatCurrency(state)
 })
 

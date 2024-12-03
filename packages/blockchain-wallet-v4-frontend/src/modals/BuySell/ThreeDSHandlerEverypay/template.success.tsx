@@ -4,8 +4,7 @@ import styled from 'styled-components'
 import { Icon } from 'blockchain-info-components'
 import { FlyoutWrapper } from 'components/Flyout'
 
-import { Props as OwnProps, State, SuccessStateType } from '.'
-import Loading from './template.loading'
+import { SuccessStateType } from '.'
 
 const CustomFlyoutWrapper = styled(FlyoutWrapper)`
   height: 100%;
@@ -18,18 +17,7 @@ const Iframe = styled.iframe`
 `
 
 const Success: React.FC<Props> = (props) => {
-  const paymentLink =
-    props.type === 'CARD'
-      ? props.providerDetails.everypay.paymentLink
-      : props.order && props.order.attributes && props.order.attributes.everypay
-      ? props.order.attributes.everypay.paymentLink
-      : props.order.attributes?.cardProvider?.cardAcquirerName === 'EVERYPAY'
-      ? props.order.attributes?.cardProvider.paymentLink
-      : ''
-
-  return props.threeDSCallbackReceived ? (
-    <Loading polling order={props.type === 'ORDER'} />
-  ) : (
+  return (
     <CustomFlyoutWrapper>
       <>
         <Icon
@@ -38,29 +26,17 @@ const Success: React.FC<Props> = (props) => {
           size='20px'
           color='grey600'
           role='button'
-          onClick={() => {
-            if (props.type === 'ORDER') {
-              props.buySellActions.setStep({
-                order: props.order,
-                step: 'ORDER_SUMMARY'
-              })
-            } else {
-              props.buySellActions.setStep({
-                step: 'ADD_CARD_DETERMINE_PROVIDER'
-              })
-            }
-          }}
+          onClick={props.handleBack}
         />
         <Iframe
-          src={`${
-            props.domains.walletHelper
-          }/wallet-helper/everypay/#/paymentLink/${encodeURIComponent(paymentLink)}`}
+          sandbox='allow-forms allow-scripts allow-same-origin'
+          src={`${props.domains.walletHelper}/wallet-helper/everypay/#/paymentLink/${props.paymentLink}`}
         />
       </>
     </CustomFlyoutWrapper>
   )
 }
 
-type Props = OwnProps & State & SuccessStateType
+type Props = SuccessStateType & { handleBack: () => void; paymentLink: string }
 
 export default Success

@@ -34,14 +34,20 @@ export const deriveAddress = (mnemonic: string): string => {
   return ethers.Wallet.fromMnemonic(mnemonic).address
 }
 
-// check this works (lockbox)
 export const deriveAddressFromXpub = (xpub) => {
   const ethPublic = HDNode.fromExtendedKey(xpub).publicKey
   return ethers.utils.computeAddress(ethPublic)
 }
 
-export const calculateFee = (gasPrice: string, gasLimit: string, toWei: boolean): string => {
-  const feeGWei = new BigNumber(gasPrice).multipliedBy(new BigNumber(gasLimit)).toString()
+export const calculateFee = (
+  gasPrice: string,
+  gasLimit: string,
+  toWei: boolean,
+  extraGasForMemo = 0
+): string => {
+  const feeGWei = new BigNumber(gasPrice)
+    .multipliedBy(new BigNumber(gasLimit).plus(extraGasForMemo))
+    .toString()
 
   if (toWei) {
     return convertGweiToWei(feeGWei)

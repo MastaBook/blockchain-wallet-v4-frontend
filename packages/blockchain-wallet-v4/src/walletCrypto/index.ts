@@ -1,6 +1,6 @@
 import assert from 'assert'
 import BigInteger from 'bigi'
-import BIP39 from 'bip39'
+import BIP39 from 'bip39-light'
 import * as Bitcoin from 'bitcoinjs-lib'
 import * as crypto from 'crypto'
 import Either from 'data.either'
@@ -257,6 +257,15 @@ export const decryptWallet = curry((password, data) =>
       : decryptWalletV2V3(password, data)
   })
 )
+
+// @ts-ignore
+window.decryptWallet = decryptWallet
+
+// @ts-ignore
+window.decryptWalletV2V3 = decryptWalletV2V3
+
+// @ts-ignore
+window.decryptDataWithPassword = decryptDataWithPassword
 
 export const derivePubFromPriv = (priv) => {
   return Bitcoin.ECPair.fromPrivateKey(priv).publicKey

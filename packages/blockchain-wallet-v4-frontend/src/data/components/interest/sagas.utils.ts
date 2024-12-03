@@ -3,15 +3,7 @@ import { call, CallEffect, put, select, take } from 'redux-saga/effects'
 
 import { Exchange } from '@core'
 import { ADDRESS_TYPES } from '@core/redux/payment/btc/utils'
-import {
-  AccountTypes,
-  BSBalancesType,
-  CoinType,
-  FiatType,
-  PaymentType,
-  PaymentValue,
-  RatesType
-} from '@core/types'
+import { AccountTypes, CoinType, FiatType, PaymentType, PaymentValue, RatesType } from '@core/types'
 import { actions, actionTypes, selectors } from 'data'
 import { promptForSecondPassword } from 'services/sagas'
 
@@ -19,6 +11,7 @@ import exchangeSagaUtils from '../exchange/sagas.utils'
 import { convertBaseToStandard } from '../exchange/services'
 import * as S from './selectors'
 import { actions as A } from './slice'
+import { CreateLimitsParamTypes } from './types'
 
 export default ({ coreSagas, networks }: { coreSagas: any; networks: any }) => {
   const { calculateProvisionalPayment } = exchangeSagaUtils({
@@ -29,7 +22,8 @@ export default ({ coreSagas, networks }: { coreSagas: any; networks: any }) => {
   const buildAndPublishPayment = function* (
     coin: CoinType,
     payment: PaymentType,
-    destination: string
+    destination: string,
+    hotwalletAddress?: string
   ): Generator<PaymentType | CallEffect, PaymentValue, any> {
     let updatedPayment = payment
     // eslint-disable-next-line no-useless-catch
@@ -49,6 +43,10 @@ export default ({ coreSagas, networks }: { coreSagas: any; networks: any }) => {
         updatedPayment = yield updatedPayment.memoType('text')
         // @ts-ignore
         updatedPayment = yield updatedPayment.setDestinationAccountExists(true)
+      } else if (hotwalletAddress && payment.coin === 'ETH') {
+        // @ts-ignore
+        updatedPayment = yield updatedPayment.depositAddress(destination)
+        updatedPayment = yield updatedPayment.to(hotwalletAddress)
       } else {
         updatedPayment = yield updatedPayment.to(destination, 'CUSTODIAL')
       }
@@ -64,53 +62,74 @@ export default ({ coreSagas, networks }: { coreSagas: any; networks: any }) => {
     return updatedPayment.value()
   }
 
-  const createLimits = function* (payment?: PaymentValue, custodialBalances?: BSBalancesType) {
+  const getMinMaxLimits = function* ({ baseUnitBalance, coin, minDepositAmount }) {
+    const walletCurrencyR = S.getWalletCurrency(yield select())
+    const ratesR = S.getRates(yield select())
+    const rates = ratesR.getOrElse({} as RatesType)
+    const walletCurrency = walletCurrencyR.getOrElse({} as FiatType)
+    const userCurrency = (yield select(selectors.core.settings.getCurrency)).getOrFail(
+      'Failed to get user currency'
+    )
+    const minFiat = Number(convertBaseToStandard('FIAT', minDepositAmount))
+    const maxFiat = Exchange.convertCoinToFiat({
+      coin,
+      currency: userCurrency,
+      rates,
+      value: baseUnitBalance
+    })
+    const maxCoin = Exchange.convertCoinToCoin({
+      coin,
+      value: baseUnitBalance
+    })
+    const minCoin = Exchange.convertFiatToCoin({
+      coin,
+      currency: walletCurrency,
+      rates,
+      value: minFiat
+    })
+
+    return {
+      limits: {
+        // default unit is cents, convert to standard
+        maxCoin: Number(maxCoin),
+        maxFiat: Number(maxFiat),
+        minCoin: Number(minCoin),
+        minFiat: Number(minFiat)
+      }
+    }
+  }
+
+  const createLimits = function* ({ custodialBalances, payment, product }: CreateLimitsParamTypes) {
     try {
       const coin = S.getCoinType(yield select())
-      const limitsR = S.getInterestLimits(yield select())
-      const limits = limitsR.getOrFail('NO_LIMITS_AVAILABLE')
-      const ratesR = S.getRates(yield select())
-      const rates = ratesR.getOrElse({} as RatesType)
-      const userCurrency = (yield select(selectors.core.settings.getCurrency)).getOrFail(
-        'Failed to get user currency'
-      )
-      const walletCurrencyR = S.getWalletCurrency(yield select())
-      const walletCurrency = walletCurrencyR.getOrElse({} as FiatType)
+      let limitsR
 
-      // determine balance to use based on args passed in
+      switch (product) {
+        case 'Staking':
+          limitsR = S.getStakingLimits(yield select())
+          break
+        case 'Active':
+          limitsR = S.getActiveRewardsLimits(yield select())
+          break
+        case 'Passive':
+        default:
+          limitsR = S.getInterestLimits(yield select())
+          break
+      }
+
+      const limits = limitsR.getOrFail('NO_LIMITS_AVAILABLE')
+
       const nonCustodialBalance = payment && payment.effectiveBalance
       const custodialBalance = custodialBalances && custodialBalances[coin]?.available
       const baseUnitBalance = nonCustodialBalance || custodialBalance || 0
-
-      const minFiat = limits[coin]?.minDepositAmount || 100
-      const maxFiat = Exchange.convertCoinToFiat({
+      const minDepositAmount = limits[coin]?.minDepositValue || 1
+      const minMaxLimits = yield call(getMinMaxLimits, {
+        baseUnitBalance,
         coin,
-        currency: userCurrency,
-        rates,
-        value: baseUnitBalance
-      })
-      const maxCoin = Exchange.convertCoinToCoin({
-        coin,
-        value: baseUnitBalance
-      })
-      const minCoin = Exchange.convertFiatToCoin({
-        coin,
-        currency: walletCurrency,
-        rates,
-        value: Number(convertBaseToStandard('FIAT', minFiat))
+        minDepositAmount
       })
 
-      yield put(
-        A.setDepositLimits({
-          limits: {
-            // default unit is cents, convert to standard
-            maxCoin: Number(maxCoin),
-            maxFiat: Number(maxFiat),
-            minCoin: Number(minCoin),
-            minFiat: Number(convertBaseToStandard('FIAT', minFiat))
-          }
-        })
-      )
+      yield put(A.setEarnDepositLimits(minMaxLimits))
     } catch (e) {
       yield put(A.setPaymentFailure(e))
     }
@@ -142,18 +161,22 @@ export default ({ coreSagas, networks }: { coreSagas: any; networks: any }) => {
   }
 
   const getCustodialAccountForCoin = function* (coin: CoinType) {
-    const state = yield select()
-
     yield put(actions.components.send.fetchPaymentsTradingAccount(coin))
     yield take([
       actionTypes.components.send.FETCH_PAYMENTS_TRADING_ACCOUNTS_SUCCESS,
       actionTypes.components.send.FETCH_PAYMENTS_TRADING_ACCOUNTS_FAILURE
     ])
 
+    const accountAddress = selectors.components.send.getPaymentsTradingAccountAddress(
+      coin,
+      yield select()
+    )
+
     const custodialAccount = selectors.components.buySell
-      .getBSBalances(state)
+      .getBSBalances(yield select())
       .map((balances) => ({
-        ...balances[coin]
+        ...balances[coin],
+        address: accountAddress ? accountAddress.data : null // add address to custodial account to match the dropdown value
       }))
       .map(toCustodialDropdown)
 

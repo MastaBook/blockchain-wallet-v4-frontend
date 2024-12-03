@@ -12,22 +12,25 @@ import {
   BtcAccountFromType,
   BtcFromType,
   BtcPaymentType,
-  WalletAcountEnum
+  WalletAccountEnum
 } from '@core/types'
 import { errorHandler } from '@core/utils'
 import { actions, actionTypes, selectors } from 'data'
+import { Analytics, ModalName } from 'data/types'
 import * as C from 'services/alerts'
-import * as Lockbox from 'services/lockbox'
 import { promptForSecondPassword } from 'services/sagas'
 
 import sendSagas from '../send/sagas'
+import { emojiRegex } from '../send/types'
 import * as A from './actions'
 import { FORM } from './model'
 import * as S from './selectors'
+import { ImportedBtcAddress, ImportedBtcAddressList, SendBtcFormValues } from './types'
 
 const DUST = 546
 const DUST_BTC = '0.00000546'
 const coin = 'BTC'
+const SEND_BTC_FORM = '@SEND.BTC.FORM'
 
 export const logLocation = 'components/sendBtc/sagas'
 export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; networks: any }) => {
@@ -36,9 +39,10 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
     coreSagas,
     networks
   })
+
   const initialized = function* (action) {
     try {
-      const { amount, description, feeType, from, lockboxIndex, payPro, to } = action.payload
+      const { amount, description, feeType, from, payPro, to } = action.payload
       yield put(A.sendBtcPaymentUpdatedLoading())
 
       yield put(actions.components.send.fetchPaymentsAccountExchange(coin))
@@ -48,12 +52,7 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
       payment = yield payment.init()
       let defaultAccountR
 
-      if (lockboxIndex && lockboxIndex >= 0) {
-        const accountsR = yield select(selectors.core.common.btc.getLockboxBtcBalances)
-        defaultAccountR = accountsR.map(nth(lockboxIndex))
-        const xpub = defaultAccountR.map(prop('xpub')).getOrFail()
-        payment = yield payment.from(xpub, ADDRESS_TYPES.LOCKBOX)
-      } else if (from === 'allImportedAddresses') {
+      if (from === 'allImportedAddresses') {
         const addressesR = yield select(selectors.core.common.btc.getActiveAddresses)
         const addresses = addressesR.getOrElse([]).filter(prop('priv')).map(prop('addr'))
         payment = yield payment.from(addresses, ADDRESS_TYPES.LEGACY)
@@ -105,19 +104,20 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
   }
 
   const destroyed = function* () {
+    yield put(A.clearSendBtcMaxCustodialWithdrawalFee())
     yield put(actions.form.destroy(FORM))
   }
 
   const bitPayInvoiceEntered = function* (bip21Payload) {
     yield put(
-      actions.modals.showModal('CONFIRMATION_MODAL', {
+      actions.modals.showModal(ModalName.CONFIRMATION_MODAL, {
         message: C.BITPAY_CONFIRM_MSG,
         origin: 'SendBtc',
         title: C.BITPAY_CONFIRM_TITLE
       })
     )
     const { canceled } = yield race({
-      canceled: take(actionTypes.modals.CLOSE_MODAL),
+      canceled: take(actions.modals.closeModal.type),
       response: take(actionTypes.wallet.SUBMIT_CONFIRMATION)
     })
     if (canceled) return
@@ -137,7 +137,7 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
   const bitpayInvoiceExpired = function* () {
     yield put(actions.modals.closeAllModals())
     yield put(
-      actions.modals.showModal('BITPAY_INVOICE_EXPIRED_MODAL', {
+      actions.modals.showModal(ModalName.BITPAY_INVOICE_EXPIRED_MODAL, {
         origin: 'SendBtc'
       })
     )
@@ -159,6 +159,12 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
   }
 
   const formChanged = function* (action) {
+    const formValues: SendBtcFormValues = yield select(selectors.form.getFormValues(SEND_BTC_FORM))
+    const maxWithdrawalFee = (yield select(S.getMaxCustodialWithdrawalFee)).getOrElse('')
+    const fiatCurrency = (yield select(selectors.core.settings.getCurrency)).getOrElse('USD')
+    const fromAccount = formValues?.from
+    const amount = formValues?.amount?.coin || '0'
+
     try {
       const form = path(['meta', 'form'], action)
       if (!equals(FORM, form)) return
@@ -170,6 +176,53 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
         payment: p.getOrElse({})
       })
 
+      const setWithdrawalFee = function* () {
+        const withdrawalAmount = Exchange.convertCoinToCoin({
+          baseToStandard: false,
+          coin: 'BTC',
+          value: amount
+        })
+        const response: ReturnType<typeof api.getCustodialToNonCustodialWithdrawalFees> =
+          yield call(api.getCustodialToNonCustodialWithdrawalFees, {
+            amount: withdrawalAmount,
+            currency: 'BTC',
+            fiatCurrency,
+            paymentMethod: 'CRYPTO_TRANSFER'
+          })
+
+        const fee = response.totalFees.amount.value
+        if (fromAccount && fromAccount.type === 'CUSTODIAL') {
+          payment = yield payment.from(
+            fromAccount.label,
+            fromAccount.type,
+            new BigNumber(fromAccount.withdrawable).minus(fee).toString()
+          )
+          payment = yield payment.fee(new BigNumber(fee).toNumber())
+        }
+        yield put(A.sendBtcPaymentUpdatedSuccess(payment.value()))
+      }
+
+      const setMaxWithdrawalFee = function* () {
+        const response: ReturnType<typeof api.getMaxCustodialWithdrawalFee> = yield call(
+          api.getMaxCustodialWithdrawalFee,
+          {
+            currency: 'BTC',
+            fiatCurrency,
+            paymentMethod: 'CRYPTO_TRANSFER'
+          }
+        )
+        const fee = response.totalFees.amount.value
+        if (fromAccount && fromAccount.type === 'CUSTODIAL') {
+          payment = yield payment.from(
+            fromAccount.label,
+            fromAccount.type,
+            new BigNumber(fromAccount.withdrawable).minus(fee).toString()
+          )
+          payment = yield payment.fee(new BigNumber(fee).toNumber())
+        }
+        yield put(A.sendBtcPaymentUpdatedSuccess(payment.value()))
+        yield put(A.sendBtcFetchMaxCustodialWithdrawalFeeSuccess(fee))
+      }
       switch (field) {
         case 'from':
           const payloadT = payload as BtcFromType
@@ -181,24 +234,13 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
           switch (payloadT.type) {
             case 'ACCOUNT':
               payment = yield payment.from(payloadT.index, fromType)
-              break
-            case 'LOCKBOX':
-              payment = yield payment.from(payloadT.xpub, fromType)
+              yield put(change(FORM, 'to', null))
               break
             case 'CUSTODIAL':
-              const response: ReturnType<typeof api.getWithdrawalFees> = yield call(
-                api.getWithdrawalFees,
-                'simplebuy',
-                'DEFAULT'
+              yield call(
+                amount === '0' && maxWithdrawalFee === '' ? setMaxWithdrawalFee : setWithdrawalFee
               )
-              const fee = response.fees.find(({ symbol }) => symbol === coin)?.minorValue || '0'
-              payment = yield payment.from(
-                payloadT.label,
-                fromType,
-                new BigNumber(payloadT.withdrawable).minus(fee).toString()
-              )
-              payment = yield payment.fee(new BigNumber(fee).toNumber())
-              yield put(A.sendBtcPaymentUpdatedSuccess(payment.value()))
+
               yield put(change(FORM, 'to', null))
               break
             default:
@@ -215,7 +257,7 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
           // @ts-ignore
           const toType = prop('type', value)
           // @ts-ignore
-          const address = prop('address', value) || value
+          const address = (prop('address', value) || value) as string
           let payProInvoice
           const tryParsePayPro = () => {
             try {
@@ -240,20 +282,17 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
                 yield put(
                   A.sendBtcFetchLimits(
                     coin,
-                    WalletAcountEnum.CUSTODIAL,
+                    WalletAccountEnum.CUSTODIAL,
                     coin,
-                    WalletAcountEnum.NON_CUSTODIAL,
+                    WalletAccountEnum.NON_CUSTODIAL,
                     currency
                   )
                 )
               }
               break
-            case equals(toType, ADDRESS_TYPES.LOCKBOX):
-              // @ts-ignore
-              payment = yield payment.to(value.xpub, toType)
-              break
-            case includes('.', address as unknown as string) &&
-              !includes('bitpay', address as unknown as string):
+            case (includes('.', address as unknown as string) &&
+              !includes('bitpay', address as unknown as string)) ||
+              !!address.match(emojiRegex):
               yield put(
                 actions.components.send.fetchUnstoppableDomainResults(
                   address as unknown as string,
@@ -268,6 +307,7 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
               payment = yield payment.to(address as unknown as string, toType)
           }
           break
+
         case 'amount':
           const btcAmount = prop('coin', payload)
           const satAmount = Exchange.convertCoinToCoin({
@@ -275,6 +315,13 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
             coin,
             value: btcAmount
           })
+          if (fromAccount?.type === 'CUSTODIAL') {
+            yield call(
+              new BigNumber(satAmount).isGreaterThan(new BigNumber(fromAccount?.withdrawable))
+                ? setMaxWithdrawalFee
+                : setWithdrawalFee
+            )
+          }
           payment = yield payment.amount(parseInt(satAmount))
           break
         case 'description':
@@ -401,28 +448,11 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
     try {
       // Sign payment
       let password
-      if (fromType !== ADDRESS_TYPES.LOCKBOX) {
-        if (fromType !== ADDRESS_TYPES.WATCH_ONLY) {
-          password = yield call(promptForSecondPassword)
-        }
-        if (fromType !== ADDRESS_TYPES.CUSTODIAL) {
-          payment = yield payment.sign(password)
-        }
-      } else {
-        const deviceR = yield select(
-          selectors.core.kvStore.lockbox.getDeviceFromBtcXpubs,
-          prop('from', p.getOrElse({}))
-        )
-        const device = deviceR.getOrFail('missing_device')
-        const deviceType = prop('device_type', device)
-        const selection = payment.value().selection || { outputs: [] }
-        const outputs = selection.outputs.filter((o) => !o.change).map(prop('address'))
-        yield call(Lockbox.promptForLockbox, coin, deviceType, outputs)
-        const connection = yield select(selectors.components.lockbox.getCurrentConnection)
-        const transport = prop('transport', connection)
-        const scrambleKey = Lockbox.utils.getScrambleKey(coin, deviceType)
-        // @ts-ignore
-        payment = yield payment.sign(null, transport, scrambleKey)
+      if (fromType !== ADDRESS_TYPES.WATCH_ONLY) {
+        password = yield call(promptForSecondPassword)
+      }
+      if (fromType !== ADDRESS_TYPES.CUSTODIAL) {
+        payment = yield payment.sign(password)
       }
       // Publish payment
       if (payPro) {
@@ -479,24 +509,12 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
         )
       }
       // Redirect to tx list, display success
-      if (fromType === ADDRESS_TYPES.LOCKBOX) {
-        yield put(actions.components.lockbox.setConnectionSuccess())
-        yield delay(4000)
-        const fromXPubs = path(['from'], payment.value())
-        const device = (yield select(
-          selectors.core.kvStore.lockbox.getDeviceFromBtcXpubs,
-          fromXPubs
-        )).getOrFail('missing_device')
-        const deviceIndex = prop('device_index', device)
-        yield put(actions.router.push(`/lockbox/dashboard/${deviceIndex}`))
-      } else {
-        yield put(actions.router.push('/btc/transactions'))
-        yield put(
-          actions.alerts.displaySuccess(C.SEND_COIN_SUCCESS, {
-            coinName: 'Bitcoin'
-          })
-        )
-      }
+      yield put(actions.router.push('/coins/BTC'))
+      yield put(
+        actions.alerts.displaySuccess(C.SEND_COIN_SUCCESS, {
+          coinName: 'Bitcoin'
+        })
+      )
 
       const amt = payment.value().amount || [0]
       const coinAmount = Exchange.convertCoinToCoin({
@@ -515,23 +533,19 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
       yield put(stopSubmit(FORM))
       // Set errors
       const error = errorHandler(e)
-      if (fromType === ADDRESS_TYPES.LOCKBOX) {
-        yield put(actions.components.lockbox.setConnectionError(e))
-      } else {
-        yield put(actions.logs.logErrorMessage(logLocation, 'secondStepSubmitClicked', e))
-        if (fromType === ADDRESS_TYPES.CUSTODIAL && error) {
-          if (error === 'Pending withdrawal locks') {
-            yield call(showWithdrawalLockAlert)
-          } else {
-            yield put(actions.alerts.displayError(error))
-          }
+      yield put(actions.logs.logErrorMessage(logLocation, 'secondStepSubmitClicked', e))
+      if (fromType === ADDRESS_TYPES.CUSTODIAL && error) {
+        if (error === 'Pending withdrawal locks') {
+          yield call(showWithdrawalLockAlert)
         } else {
-          yield put(
-            actions.alerts.displayError(C.SEND_COIN_ERROR, {
-              coinName: 'Bitcoin'
-            })
-          )
+          yield put(actions.alerts.displayError(error))
         }
+      } else {
+        yield put(
+          actions.alerts.displayError(C.SEND_COIN_ERROR, {
+            coinName: 'Bitcoin'
+          })
+        )
       }
     }
   }
@@ -554,8 +568,103 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
     }
   }
 
+  const btcImportedFundsSweepEffectiveBalance = function* () {
+    try {
+      yield take(actionTypes.core.data.btc.FETCH_BTC_DATA_SUCCESS)
+      const addressesR = yield select(selectors.core.common.btc.getActiveAddresses)
+      const addresses = addressesR.getOrElse([]).filter(prop('priv'))
+      const hasEffectiveBalances: ImportedBtcAddressList = []
+      // eslint-disable-next-line no-restricted-syntax
+      for (const addr of addresses) {
+        if (addr.info.final_balance > 0) {
+          let payment = coreSagas.payment.btc.create({
+            network: networks.btc
+          })
+          payment = yield payment.init()
+          payment = yield payment.from(addr.addr, ADDRESS_TYPES.LEGACY)
+          const defaultFeePerByte = path(['fees', 'regular'], payment.value())
+
+          payment = yield payment.fee(defaultFeePerByte)
+          const effectiveBalance = prop('effectiveBalance', payment.value())
+          if (effectiveBalance > 0) {
+            hasEffectiveBalances.push({
+              address: addr.addr,
+              balance: addr.info.final_balance
+            })
+          }
+        }
+      }
+      yield put(A.btcImportedFundsSweepEffectiveBalanceSuccess(hasEffectiveBalances))
+    } catch (e) {
+      yield put(A.btcImportedFundsSweepEffectiveBalanceFailure([]))
+    }
+  }
+
+  const btcImportedFundsSweep = function* (action) {
+    const { payload } = action
+    yield put(A.btcImportedFundsSweepLoading())
+    try {
+      // eslint-disable-next-line no-restricted-syntax
+      for (const addr of payload) {
+        const accounts = (yield select(selectors.core.common.btc.getAccountsBalances)).getOrElse([])
+        const defaultIndex = yield select(selectors.core.wallet.getDefaultAccountIndex)
+
+        const defaultAccount = accounts.filter((acc) => acc.index === defaultIndex)[0]
+
+        const receiveIndexMultiaddr = (yield select(
+          selectors.core.data.btc.getReceiveIndex(defaultAccount.xpub)
+        )).getOrElse(0)
+        const receiveIndexPrev = yield select(S.getImportFundsReceiveIndex)
+
+        const receiveIndex = receiveIndexPrev ? receiveIndexPrev + 1 : receiveIndexMultiaddr
+
+        let payment = coreSagas.payment.btc.create({
+          network: networks.btc
+        })
+
+        payment = yield payment.init()
+        payment = yield payment.from(addr, ADDRESS_TYPES.LEGACY)
+        payment = yield payment.to(defaultAccount.index, ADDRESS_TYPES.ACCOUNT, receiveIndex)
+        const defaultFeePerByte = path(['fees', 'regular'], payment.value())
+
+        payment = yield payment.fee(defaultFeePerByte)
+        const effectiveBalance = prop('effectiveBalance', payment.value())
+        payment = yield payment.amount(parseInt(effectiveBalance))
+        payment = yield payment.build()
+        let password
+        payment = yield payment.sign(password)
+        payment = yield payment.publish()
+        yield put(A.setImportFundsReceiveIndex(receiveIndex))
+        yield put(
+          actions.analytics.trackEvent({
+            key: Analytics.TRANSFER_FUNDS_SUCCESS,
+            properties: {}
+          })
+        )
+      }
+      yield put(actions.core.data.btc.fetchData())
+      yield put(A.btcImportedFundsSweepSuccess(true))
+    } catch (e) {
+      yield put(
+        actions.alerts.displayError(C.SEND_COIN_ERROR, {
+          coinName: 'Bitcoin'
+        })
+      )
+      yield put(A.btcImportedFundsSweepFailure(e))
+      yield put(actions.logs.logErrorMessage(logLocation, 'sweepBtcFunds', e))
+      yield put(
+        actions.analytics.trackEvent({
+          key: Analytics.TRANSFER_FUNDS_FAILURE,
+          properties: {}
+        })
+      )
+      yield put(A.setImportFundsReceiveIndex(null))
+    }
+  }
   return {
     bitpayInvoiceExpired,
+    btcImportedFundsSweep,
+    btcImportedFundsSweepEffectiveBalance,
     destroyed,
     fetchSendLimits,
     firstStepSubmitClicked,

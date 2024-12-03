@@ -2,11 +2,12 @@ import React, { useState } from 'react'
 import { FormattedMessage } from 'react-intl'
 import styled from 'styled-components'
 
-import { FileUploadItem, InterestEDDDocumentsResponse } from '@core/types'
+import { EarnEDDDocumentsResponse, FileUploadItem } from '@core/types'
 import { Button, Text } from 'blockchain-info-components'
 import { toBase64 } from 'utils/helpers'
 
 import DragAndDrop from '../../DragAndDrop'
+// eslint-disable-next-line import/no-named-as-default
 import Container from '../Container'
 import Content from '../Content'
 import Footer from '../Footer'
@@ -138,7 +139,7 @@ const UploadAndVerify: React.FC<Props> = (props) => {
   const getCategory = (name: string) =>
     name.includes('proofOfAddress') ? 'PROOF_OF_ADDRESS' : 'PROOF_OF_INCOME'
 
-  const submitUplaodedFiles = () => {
+  const submitUploadedFiles = () => {
     setIsUploading(true)
     const files: FileUploadItem[] = []
     // we had to do async converting files into base64
@@ -204,14 +205,14 @@ const UploadAndVerify: React.FC<Props> = (props) => {
           </Title>
           <Subtitle color='grey900' size='14px' weight={500} lineHeight='20px'>
             <FormattedMessage
-              id='modals.interest.withdrawal.upload_documents.get_started.bank_acccount_statement'
+              id='modals.interest.withdrawal.upload_documents.get_started.bank_account_statement'
               defaultMessage='Bank Account Statement or Utility Bill'
             />
           </Subtitle>
 
           <Text color='grey600' lineHeight='1.5' size='12px' weight={500}>
             <FormattedMessage
-              id='modals.interest.withdrawal.upload_documents.get_started.bank_acccount_statement.description'
+              id='modals.interest.withdrawal.upload_documents.get_started.bank_account_statement.description'
               defaultMessage='Must be dated within the last 90 days or a council tax bill for the current tax year.'
             />
           </Text>
@@ -307,15 +308,14 @@ const UploadAndVerify: React.FC<Props> = (props) => {
         </ContentWrapper>
       </Content>
 
-      <Footer>
+      <Footer collapsed>
         <Button
           nature='primary'
           data-e2e='additionalInfoUploadDocument'
           type='button'
           fullwidth
           height='48px'
-          style={{ marginTop: '16px' }}
-          onClick={() => submitUplaodedFiles()}
+          onClick={() => submitUploadedFiles()}
           disabled={disable}
         >
           <FormattedMessage id='buttons.submit' defaultMessage='Submit' />
@@ -326,7 +326,7 @@ const UploadAndVerify: React.FC<Props> = (props) => {
 }
 
 export type Props = {
-  documentLimits: InterestEDDDocumentsResponse
+  documentLimits: EarnEDDDocumentsResponse
   nextStep: () => void
   previousStep: () => void
   submitData: (files) => void

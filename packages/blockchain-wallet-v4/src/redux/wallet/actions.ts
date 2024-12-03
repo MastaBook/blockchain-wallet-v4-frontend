@@ -43,9 +43,17 @@ export const setAccountArchived = (accountIdx, archived) => ({
   payload: { accountIdx, archived },
   type: T.SET_ACCOUNT_ARCHIVED
 })
+export const setAccountDerivations = (accountIdx, derivations) => ({
+  payload: { accountIdx, derivations },
+  type: T.SET_ACCOUNT_DERIVATIONS
+})
 export const setDefaultAccountIdx = (index) => ({
   payload: { index },
   type: T.SET_DEFAULT_ACCOUNT
+})
+export const setDefaultDerivation = (accountIdx, derivationType) => ({
+  payload: { accountIdx, derivationType },
+  type: T.SET_DEFAULT_DERIVATION
 })
 export const setTransactionNote = (txHash, txNote) => ({
   payload: { txHash, txNote },

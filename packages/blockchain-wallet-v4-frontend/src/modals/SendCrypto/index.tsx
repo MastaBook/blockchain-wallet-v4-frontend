@@ -17,6 +17,7 @@ import Confirm from './Confirm'
 import EnterAmount from './EnterAmount'
 import EnterTo from './EnterTo'
 import { SEND_FORM } from './model'
+import NoFunds from './NoFunds'
 import { getData } from './selectors'
 import Status from './Status'
 import { SendFormType } from './types'
@@ -31,12 +32,15 @@ class SendCrypto extends PureComponent<Props, State> {
     /* eslint-disable */
     this.setState({ show: true })
     /* eslint-enable */
-    this.props.sendCryptoActions.fetchWithdrawalFees()
+    this.props.sendCryptoActions.initializeSend()
+
+    this.props.sendCryptoActions.fetchWithdrawalFees({})
     this.props.sendCryptoActions.fetchWithdrawalLocks()
   }
 
   componentWillUnmount() {
-    this.props.sendCryptoActions.setStep({ step: SendCryptoStepType.COIN_SELECTION })
+    // this.props.sendCryptoActions.setStep({ step: SendCryptoStepType.COIN_SELECTION })
+    this.props.sendCryptoActions.clearCustodialWithdrawal()
   }
 
   handleClose = () => {
@@ -49,9 +53,14 @@ class SendCrypto extends PureComponent<Props, State> {
   render() {
     return (
       <Flyout {...this.props} isOpen={this.state.show} onClose={this.handleClose}>
+        {this.props.step === SendCryptoStepType.NO_FUNDS && (
+          <FlyoutChild>
+            <NoFunds {...this.props} close={this.handleClose} />
+          </FlyoutChild>
+        )}
         {this.props.step === SendCryptoStepType.COIN_SELECTION && (
           <FlyoutChild>
-            <CoinSelect {...this.props} />
+            <CoinSelect {...this.props} close={this.handleClose} />
           </FlyoutChild>
         )}
         {this.props.step === SendCryptoStepType.ENTER_TO && (
@@ -84,8 +93,10 @@ const mapStateToProps = (state: RootState) => ({
   formValues: selectors.form.getFormValues(SEND_FORM)(state) as SendFormType,
   initialValues: {
     coin: state.components.sendCrypto.initialCoin,
+    fee: 'LOW',
     fix: 'CRYPTO'
   },
+  isValidAddress: selectors.components.sendCrypto.getIsValidAddress(state),
   sendLimits: selectors.components.sendCrypto
     .getSendLimits(state)
     .getOrElse({} as CrossBorderLimits),
@@ -95,6 +106,7 @@ const mapStateToProps = (state: RootState) => ({
 })
 
 const mapDispatchToProps = (dispatch: Dispatch) => ({
+  buySellActions: bindActionCreators(actions.components.buySell, dispatch),
   formActions: bindActionCreators(actions.form, dispatch),
   routerActions: bindActionCreators(actions.router, dispatch),
   sendCryptoActions: bindActionCreators(actions.components.sendCrypto, dispatch),
@@ -110,8 +122,8 @@ const mapDispatchToProps = (dispatch: Dispatch) => ({
 
 const connector = connect(mapStateToProps, mapDispatchToProps)
 
-const enhance = compose<any>(
-  ModalEnhancer(ModalName.SEND_CRYPTO_MODAL, { transition: duration }),
+const enhance = compose<React.ComponentType>(
+  ModalEnhancer(ModalName.SEND_CRYPTO_MODAL, { fixed: true, transition: duration }),
   connector,
   reduxForm({
     destroyOnUnmount: false,

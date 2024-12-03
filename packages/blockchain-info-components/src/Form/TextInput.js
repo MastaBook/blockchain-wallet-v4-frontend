@@ -45,7 +45,7 @@ const BaseTextInput = styled.input.attrs((props) => ({
   &:disabled {
     cursor: not-allowed;
     background-color: ${(props) => props.theme.grey100};
-    border: '1px solid transparent';
+    border: 1px solid transparent;
   }
 `
 const Container = styled.div`
@@ -93,19 +93,8 @@ class TextInput extends React.Component {
   }
 
   render() {
-    const {
-      active,
-      borderColor,
-      borderRightNone,
-      disabled,
-      errorState,
-      focusedBorderColor,
-      icon,
-      iconSize,
-      minHeight,
-      value,
-      ...rest
-    } = this.props
+    const { disabled, errorState, icon, iconSize, minHeight, noLastPass, value, ...rest } =
+      this.props
 
     return (
       <Container>
@@ -117,6 +106,7 @@ class TextInput extends React.Component {
           focusedBorderColor={selectFocusBorderColor(errorState)}
           icon={icon}
           onKeyDown={this.onKeyPressed}
+          noLastPass={noLastPass}
           ref={this.refInput}
           value={value}
           minHeight={minHeight}

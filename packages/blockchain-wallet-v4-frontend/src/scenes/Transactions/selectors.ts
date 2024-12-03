@@ -17,17 +17,18 @@ import {
 } from 'ramda'
 import { createSelector } from 'reselect'
 
+import { IngestedSelfCustodyType } from '@core/network/api/coin/types'
 import {
   AddressTypesType,
   BSOrderType,
   BSTransactionType,
-  CoinfigType,
   ProcessedTxType,
   RemoteDataType
 } from '@core/types'
 import { model, selectors } from 'data'
 import { RootState } from 'data/rootReducer'
 
+import { OwnProps } from '.'
 import { TransferType, TxType } from './types'
 
 const { WALLET_TX_SEARCH } = model.form
@@ -41,12 +42,13 @@ const filterTransactions = curry(
   ) => {
     const isOfTxType = curry((filter: TransferType, tx) => {
       return propSatisfies(
-        (x) =>
+        (x: string) =>
           filter === '' ||
-          // @ts-ignore
           (x && toUpper(x) === toUpper(filter)) ||
           (x === 'DEPOSIT' && filter === 'received') ||
-          (x === 'WITHDRAWAL' && filter === 'sent'),
+          (x === 'WITHDRAWAL' && filter === 'sent') ||
+          (x === 'RECEIVED' && filter === 'received') ||
+          (x === 'SENT' && filter === 'sent'),
         'type',
         tx
       )
@@ -54,7 +56,9 @@ const filterTransactions = curry(
     const search = curry((text, txPath, tx) =>
       compose(includes(toUpper(text || '')), toUpper, String, path(txPath))(tx)
     )
+
     const searchPredicate = anyPass(
+      // @ts-ignore
       map(search(criteria), [
         ['id'],
         ['description'],
@@ -73,10 +77,11 @@ const filterTransactions = curry(
         case '':
           return tx
         default:
-          return (tx as ProcessedTxType).blockHeight
+          return (tx as ProcessedTxType).blockHeight || (tx as IngestedSelfCustodyType).movements
       }
     }
 
+    // @ts-ignore
     const fullPredicate = allPass([isOfTxType(status), searchPredicate])
     return filter(fullPredicate, transactions.filter(sourceTypeFilter))
   }
@@ -84,13 +89,15 @@ const filterTransactions = curry(
 
 const coinSelectorMap = (
   state,
-  coin,
-  coinfig: CoinfigType
+  coin
 ): ((state: RootState) => Array<RemoteDataType<any, Array<TxType>>>) => {
   if (selectors.core.data.coins.getErc20Coins().includes(coin)) {
     return (state) => selectors.core.common.eth.getErc20WalletTransactions(state, coin)
   }
   if (selectors.core.data.coins.getCustodialCoins().includes(coin)) {
+    return (state) => selectors.core.common.coins.getWalletTransactions(state, coin)
+  }
+  if (selectors.core.data.coins.getDynamicSelfCustodyCoins().includes(coin)) {
     return (state) => selectors.core.common.coins.getWalletTransactions(state, coin)
   }
   if (selectors.core.common[toLower(coin)]) {
@@ -101,17 +108,25 @@ const coinSelectorMap = (
   return (state) => selectors.core.data.fiat.getTransactions(coin, state)
 }
 
-export const getData = (state, coin, coinfig: CoinfigType) =>
-  createSelector(
+export const getData = (state: RootState, ownProps: OwnProps) => {
+  const { computedMatch } = ownProps
+  const { coin } = computedMatch.params
+  const userData = selectors.modules.profile.getUserData(state)
+  const current = userData?.data?.tiers?.current || 0
+  const isGoldTier = current >= 2
+  const signupCountry = selectors.signup.getSignupCountry(state)
+  const loginMetadata = selectors.auth.getProductAuthMetadata(state)
+
+  return createSelector(
     [
       () => selectors.core.settings.getInvitations(state),
       selectors.form.getFormValues(WALLET_TX_SEARCH),
-      coinSelectorMap(state, coin, coinfig),
+      coinSelectorMap(state, coin),
       selectors.core.settings.getCurrency,
-      selectors.components.recurringBuy.getRegisteredListByCoin(coin),
-      selectors.core.walletOptions.getFeatureFlagRecurringBuys
+      selectors.components.interest.getInterestEligible,
+      selectors.components.interest.getStakingEligible
     ],
-    (invitationsR, userSearch, pagesR, currencyR, recurringBuys, isRecurringBuyR) => {
+    (invitationsR, userSearch, pagesR, currencyR, interestEligibleR, stakingEligibleR) => {
       const empty = (page) => isEmpty(page.data)
       const search = propOr('', 'search', userSearch)
       const status: TransferType = propOr('', 'status', userSearch)
@@ -123,20 +138,29 @@ export const getData = (state, coin, coinfig: CoinfigType) =>
             )
           : []
 
+      const ipCountry = loginMetadata?.ipCountry
+      const country = userData.data?.address?.country
+      const userCountry = country !== undefined ? country : ipCountry
+      const showRiskInvestments = userCountry === 'GB' || signupCountry === 'GB'
+
       return {
+        coin,
         currency: currencyR.getOrElse(''),
         hasTxResults: !all(empty)(filteredPages),
+        interestEligible: interestEligibleR.getOrElse({}),
+        isGoldTier,
         isInvited: invitationsR
           .map(propOr(false, 'openBanking'))
           .getOrElse({ openBanking: false }) as boolean,
-        isRecurringBuy: isRecurringBuyR.getOrElse(false) as boolean,
         // @ts-ignore
         isSearchEntered: search.length > 0 || status !== '',
         pages: filteredPages,
-        recurringBuys,
-        sourceType
+        showRiskInvestments,
+        sourceType,
+        stakingEligible: stakingEligibleR.getOrElse({})
       }
     }
   )(state)
+}
 
 export default getData

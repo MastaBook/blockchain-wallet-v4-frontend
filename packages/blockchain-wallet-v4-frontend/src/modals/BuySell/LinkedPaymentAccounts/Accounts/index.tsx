@@ -1,339 +1,349 @@
-import React, { PureComponent, ReactElement } from 'react'
+import React, { ReactNode, useCallback, useEffect, useState } from 'react'
 import { FormattedMessage } from 'react-intl'
-import { Form, InjectedFormProps, reduxForm } from 'redux-form'
-import styled from 'styled-components'
+import { useDispatch } from 'react-redux'
+import { Form, reduxForm } from 'redux-form'
 
 import {
   BSPaymentMethodType,
   BSPaymentTypes,
+  FiatType,
+  MobilePaymentType,
   OrderType,
   WalletCurrencyType,
-  WalletFiatEnum
+  WalletFiatEnum,
+  WalletFiatType
 } from '@core/types'
 import { Icon, Image, Text } from 'blockchain-info-components'
 import { AddNewButton } from 'components/Brokerage'
+import { Divider } from 'components/Divider'
 import { FlyoutWrapper } from 'components/Flyout'
-import { CARD_TYPES, DEFAULT_CARD_SVG_LOGO } from 'components/Form/CreditCardBox/model'
+import { GenericNabuErrorCard } from 'components/GenericNabuErrorCard'
+import { Padding } from 'components/Padding'
+import { trackEvent } from 'data/analytics/slice'
+import { Analytics } from 'data/analytics/types'
+import { buySell } from 'data/components/actions'
 import { getCoinFromPair, getFiatFromPair } from 'data/components/buySell/model'
-import { getBankLogoImageName } from 'services/images'
+import { getEnterAmountStepType } from 'data/components/buySell/utils'
+import { BSCardStateEnum } from 'data/types'
 
-import { Props as OwnProps, SuccessStateType } from '../index'
+import { PaymentMethodsProps } from '../index'
+import { getData } from '../selectors'
+import { NoMethods, PaymentsWrapper, TopText, Wrapper } from './AccountsStyles'
 import Bank from './Bank'
 import Card from './Card'
 import Fund from './Fund'
+import { getIcon, getLinkedBankIcon, getType, renderBankText, renderCardText } from './helpers'
+import MobilePayment from './MobilePayment'
 
-const Wrapper = styled.div`
-  display: flex;
-  justify-content: space-between;
-  flex-direction: column;
-  height: 100%;
-`
-const TopText = styled(Text)`
-  display: flex;
-  align-items: center;
-  margin-bottom: 7px;
-`
-const PaymentsWrapper = styled.div`
-  border-top: 1px solid ${(props) => props.theme.grey000};
-`
-const NoMethods = styled(FlyoutWrapper)`
-  text-align: center;
-`
-const IconContainer = styled.div`
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background-color: ${(props) => props.theme.blue000};
-  display: flex;
-  align-items: center;
-  justify-content: center;
-`
-
-export type Props = OwnProps & SuccessStateType
-
-class Accounts extends PureComponent<InjectedFormProps<{}, Props> & Props> {
-  getType = (value: BSPaymentMethodType) => {
-    switch (value.type) {
-      case BSPaymentTypes.BANK_TRANSFER:
-      case BSPaymentTypes.LINK_BANK:
-        return <FormattedMessage id='modals.simplebuy.banklink' defaultMessage='Link a Bank' />
-      case BSPaymentTypes.BANK_ACCOUNT:
-        return <FormattedMessage id='modals.simplebuy.bankwire' defaultMessage='Wire Transfer' />
-      case BSPaymentTypes.PAYMENT_CARD:
-        return (
-          <FormattedMessage
-            id='modals.simplebuy.paymentcard'
-            defaultMessage='Credit or Debit Card'
-          />
-        )
-      case BSPaymentTypes.USER_CARD:
-        return value && value.card ? (
-          value.card.label ? (
-            value.card.label
-          ) : (
-            value.card.type
-          )
-        ) : (
-          <FormattedMessage
-            id='modals.simplebuy.paymentcard'
-            defaultMessage='Credit or Debit Card'
-          />
-        )
-      case BSPaymentTypes.FUNDS:
-      default:
-        return ''
-    }
+export type Props = PaymentMethodsProps &
+  ReturnType<typeof getData>['data'] & {
+    fiatCurrency: undefined | FiatType
   }
 
-  handleSubmit = (method: BSPaymentMethodType) => {
-    this.props.buySellActions.handleMethodChange({ isFlow: false, method })
-  }
+const Accounts = ({
+  applePayEnabled,
+  balances,
+  bankTransferAccounts,
+  cards,
+  fiatCurrency,
+  googlePayEnabled,
+  isInternalTester,
+  orderType,
+  pair,
+  paymentMethods,
+  userData,
+  walletCurrency
+}: Props) => {
+  const dispatch = useDispatch()
+  const [applePayAvailable, setApplePayAvailable] = useState(false)
+  const [googlePayAvailable, setGooglePayAvailable] = useState(false)
+  const [card, setCard] = useState<ReactNode | undefined>()
 
-  addNewPaymentMethod = () => {
-    if (this.props.fiatCurrency) {
-      this.props.buySellActions.setStep({
-        cryptoCurrency: getCoinFromPair(this.props.pair.pair),
-        fiatCurrency: this.props.fiatCurrency,
-        order: this.props.order,
-        pair: this.props.pair,
-        step: 'PAYMENT_METHODS'
+  const clearCard = useCallback(() => setCard(undefined), [])
+
+  const addCard = useCallback((card: ReactNode) => setCard(card), [])
+
+  const handlePaymentMethodSelect = ({
+    method,
+    mobilePaymentMethod
+  }: {
+    method: BSPaymentMethodType
+    mobilePaymentMethod?: MobilePaymentType
+  }) => {
+    dispatch(
+      trackEvent({
+        key: Analytics.BUY_PAYMENT_METHOD_CHANGED,
+        properties: {
+          payment_type: method.type
+        }
       })
+    )
+
+    dispatch(buySell.handleMethodChange({ isFlow: false, method, mobilePaymentMethod }))
+  }
+
+  const addNewPaymentMethod = () => {
+    dispatch(
+      trackEvent({
+        key: Analytics.BUY_PAYMENT_METHOD_ADD_NEW_CLICKED,
+        properties: {}
+      })
+    )
+
+    if (fiatCurrency) {
+      dispatch(
+        buySell.setStep({
+          cryptoCurrency: getCoinFromPair(pair.pair),
+          fiatCurrency,
+          pair,
+          step: 'PAYMENT_METHODS'
+        })
+      )
     }
   }
 
-  getLinkedBankIcon = (bankName: string): ReactElement => (
-    <Image name={getBankLogoImageName(bankName)} height='48px' />
+  const availableBankAccounts = bankTransferAccounts.filter(
+    (account) => account.state === BSCardStateEnum.ACTIVE && orderType === OrderType.BUY
+  )
+  const availableCards = cards.filter(
+    (card) => card.state === BSCardStateEnum.ACTIVE && orderType === OrderType.BUY
   )
 
-  getIcon = (value: BSPaymentMethodType): ReactElement => {
-    switch (value.type) {
-      case BSPaymentTypes.BANK_TRANSFER:
-      case BSPaymentTypes.LINK_BANK:
-        return <Image name='bank' height='48px' />
-      case BSPaymentTypes.BANK_ACCOUNT:
-        return (
-          <IconContainer>
-            <Icon size='18px' color='blue600' name='arrow-down' />
-          </IconContainer>
-        )
-      case BSPaymentTypes.PAYMENT_CARD:
-        return (
-          <IconContainer>
-            <Icon size='18px' color='blue600' name='credit-card-sb' />
-          </IconContainer>
-        )
-      case BSPaymentTypes.USER_CARD:
-        const { card } = value
-        if (!card) {
-          return <></>
-        }
-        const cardType = CARD_TYPES.find((cc) => cc.type === card.type)
-        return (
-          <img
-            alt='Credit Card Type'
-            height='18px'
-            width='auto'
-            src={cardType ? cardType.logo : DEFAULT_CARD_SVG_LOGO}
-          />
-        )
-      case BSPaymentTypes.FUNDS:
-        return <Icon size='32px' color='USD' name={value.currency as WalletCurrencyType} />
-      default:
-        return <Image name='blank-card' />
-    }
-  }
+  const defaultMethods = paymentMethods.methods.map((value) => ({
+    text: getType(value),
+    value
+  }))
 
-  renderBankText = (value: BSPaymentMethodType): string | ReactElement => {
-    return value.details ? (
-      value.details.bankName ? (
-        value.details.bankName
-      ) : (
-        value.details.accountNumber
-      )
+  const bankTransfer = defaultMethods.find(
+    (method) => method.value.type === BSPaymentTypes.BANK_TRANSFER && orderType === OrderType.BUY
+  )
+
+  const fiatCurrencies = userData.currencies.userFiatCurrencies
+  const funds = defaultMethods.filter(
+    (method) =>
+      method.value.type === BSPaymentTypes.FUNDS &&
+      method.value.currency in WalletFiatEnum &&
+      (orderType === OrderType.SELL ||
+        Number(balances[method.value.currency as WalletCurrencyType]?.available) > 0) &&
+      // for sell we should show only userFiatCurrencies currencies
+      (orderType === OrderType.BUY ||
+        (orderType === OrderType.SELL &&
+          fiatCurrencies.includes(method.value.currency as WalletFiatType)))
+  )
+
+  // use this to get min/max for card buys from eligible/payment-methods
+  // limits aren't available on availableCards
+  const cardMethod = defaultMethods.find(
+    (method) => method.value.type === BSPaymentTypes.PAYMENT_CARD
+  )
+  const cardMethods = availableCards.map((card) => ({
+    text: card.card ? card.card.label ?? card.card.type : 'Credit or Debit Card',
+    value: {
+      ...card,
+      card: card.card,
+      currency: card.currency,
+      limits: {
+        max: cardMethod?.value.limits.max ?? '50000',
+        min: cardMethod?.value.limits.min ?? '10000'
+      },
+      type: BSPaymentTypes.USER_CARD
+    } as BSPaymentMethodType
+  }))
+
+  const bankMethods = availableBankAccounts.map((account) => ({
+    text: account.details ? (
+      account.details.accountName ?? account.details.accountNumber
     ) : (
       <FormattedMessage id='copy.bank_account' defaultMessage='Bank Account' />
-    )
-  }
+    ),
+    value: {
+      ...account,
+      currency: account.currency,
+      limits: bankTransfer?.value?.limits ?? {
+        max: '200000',
+        min: '100'
+      },
+      type: BSPaymentTypes.BANK_TRANSFER
+    } as BSPaymentMethodType
+  }))
 
-  renderCardText = (value: BSPaymentMethodType): string => {
-    return value.card
-      ? value.card.label
-        ? value.card.label
-        : value.card.type
-      : 'Credit or Debit Card'
-  }
+  const applePay = defaultMethods.find(
+    (method) =>
+      method.value.mobilePayment?.includes(MobilePaymentType.APPLE_PAY) &&
+      orderType === OrderType.BUY
+  )
 
-  render() {
-    const { orderType } = this.props
-    const availableBankAccounts = this.props.bankTransferAccounts.filter(
-      (account) => account.state === 'ACTIVE' && orderType === OrderType.BUY
-    )
-    const availableCards = this.props.cards.filter(
-      (card) => card.state === 'ACTIVE' && orderType === OrderType.BUY
-    )
+  const googlePay = defaultMethods.find(
+    (method) =>
+      method.value.mobilePayment?.includes(MobilePaymentType.GOOGLE_PAY) &&
+      orderType === OrderType.BUY
+  )
 
-    const defaultMethods = this.props.paymentMethods.methods.map((value) => ({
-      text: this.getType(value),
-      value
-    }))
+  const availableMethods =
+    funds.length || cardMethods.length || bankMethods.length || !!applePay || !!googlePay
 
-    const bankTransfer = defaultMethods.find(
-      (method) => method.value.type === BSPaymentTypes.BANK_TRANSFER && orderType === OrderType.BUY
-    )
+  useEffect(() => {
+    if (
+      (window as any)?.ApplePaySession?.canMakePayments() &&
+      (applePayEnabled || isInternalTester)
+    ) {
+      setApplePayAvailable(true)
+    }
 
-    const funds = defaultMethods.filter(
-      (method) =>
-        method.value.type === BSPaymentTypes.FUNDS &&
-        method.value.currency in WalletFiatEnum &&
-        (orderType === OrderType.SELL ||
-          Number(this.props.balances[method.value.currency as WalletCurrencyType]?.available) > 0)
-    )
+    if (googlePayEnabled || isInternalTester) {
+      setGooglePayAvailable(true)
+    }
+  }, [applePayEnabled, googlePayEnabled, isInternalTester])
 
-    // use this to get min/max for card buys from eligible/payment-methods
-    // limits aren't available on availableCards
-    const cardMethod = defaultMethods.find(
-      (method) => method.value.type === BSPaymentTypes.PAYMENT_CARD
-    )
-    const cardMethods = availableCards.map((card) => ({
-      text: card.card
-        ? card.card.label
-          ? card.card.label
-          : card.card.type
-        : 'Credit or Debit Card',
-      value: {
-        ...card,
-        card: card.card,
-        currency: card.currency,
-        limits: {
-          max: cardMethod?.value.limits.max || '50000',
-          min: cardMethod?.value.limits.min || '10000'
-        },
-        type: BSPaymentTypes.USER_CARD
-      } as BSPaymentMethodType
-    }))
-
-    const bankMethods = availableBankAccounts.map((account) => ({
-      text: account.details ? (
-        account.details.accountName ? (
-          account.details.accountName
-        ) : (
-          account.details.accountNumber
-        )
-      ) : (
-        <FormattedMessage id='copy.bank_account' defaultMessage='Bank Account' />
-      ),
-      value: {
-        ...account,
-        currency: account.currency,
-        limits: (bankTransfer && bankTransfer.value && bankTransfer.value.limits) || {
-          max: '200000',
-          min: '100'
-        },
-        type: BSPaymentTypes.BANK_TRANSFER
-      } as BSPaymentMethodType
-    }))
-
-    const availableMethods = funds.length || cardMethods.length || bankMethods.length
-    return (
+  return (
+    <Form>
       <Wrapper>
-        <Form>
-          <FlyoutWrapper>
-            <TopText color='grey800' size='20px' weight={600}>
-              <Icon
-                cursor
-                name='arrow-back'
-                size='20px'
-                color='grey600'
-                style={{ marginRight: '28px' }}
-                role='button'
-                onClick={() =>
-                  this.props.buySellActions.setStep({
-                    cryptoCurrency: getCoinFromPair(this.props.pair.pair),
-                    fiatCurrency: getFiatFromPair(this.props.pair.pair),
-                    orderType: this.props.orderType,
-                    pair: this.props.pair,
-                    step: 'ENTER_AMOUNT'
+        <FlyoutWrapper style={{ flexShrink: 0 }}>
+          <TopText color='grey800' size='20px' weight={600}>
+            <Icon
+              cursor
+              name='arrow-back'
+              size='20px'
+              color='grey600'
+              style={{ marginRight: '28px' }}
+              role='button'
+              onClick={() =>
+                dispatch(
+                  buySell.setStep({
+                    cryptoCurrency: getCoinFromPair(pair.pair),
+                    fiatCurrency: getFiatFromPair(pair.pair),
+                    orderType,
+                    pair,
+                    step: getEnterAmountStepType(orderType)
                   })
-                }
+                )
+              }
+            />
+            <div>
+              <FormattedMessage id='modals.simplebuy.payusing' defaultMessage='Pay Using' />
+            </div>
+          </TopText>
+        </FlyoutWrapper>
+        <PaymentsWrapper>
+          {!availableMethods && (
+            <NoMethods>
+              <Image
+                height='60px'
+                name='world-alert'
+                srcset={{ 'world-alert2': '2x', 'world-alert3': '3x' }}
               />
-              <div>
+              <Text size='16px' weight={500} style={{ marginTop: '8px' }}>
                 <FormattedMessage
-                  id='modals.simplebuy.paymentmethods'
-                  defaultMessage='Payment Methods'
+                  id='copy.no_payment_methods'
+                  defaultMessage='No payment methods available.'
                 />
-              </div>
-            </TopText>
-          </FlyoutWrapper>
-          <PaymentsWrapper>
-            {!availableMethods && (
-              <NoMethods>
-                <Image
-                  height='60px'
-                  name='world-alert'
-                  srcset={{ 'world-alert2': '2x', 'world-alert3': '3x' }}
-                />
-                <Text size='16px' weight={500} style={{ marginTop: '8px' }}>
-                  <FormattedMessage
-                    id='copy.no_payment_methods'
-                    defaultMessage='No payment methods available.'
-                  />
-                </Text>
-              </NoMethods>
-            )}
-            {funds &&
-              funds.map((fund, index) => (
+              </Text>
+            </NoMethods>
+          )}
+
+          {funds
+            ? funds.map((fund, index) => (
                 <Fund
                   // eslint-disable-next-line react/no-array-index-key
                   key={`${fund.text}-${index}`}
                   value={fund.value}
-                  icon={this.getIcon(fund.value)}
-                  onClick={() => this.handleSubmit(fund.value)}
+                  icon={getIcon(fund.value)}
+                  onClick={() => handlePaymentMethodSelect({ method: fund.value })}
                   balances={
-                    this.props.balances[fund.value.currency] || {
+                    balances[fund.value.currency] ?? {
                       available: '0',
                       pending: '0',
                       withdrawable: '0'
                     }
                   }
-                  walletCurrency={this.props.walletCurrency}
+                  walletCurrency={walletCurrency}
                 />
-              ))}
-            {cardMethods &&
-              cardMethods.map((cardMethod, index) => (
+              ))
+            : null}
+
+          {applePay && applePayAvailable ? (
+            <MobilePayment
+              type='apple'
+              onClick={() => {
+                handlePaymentMethodSelect({
+                  method: applePay.value,
+                  mobilePaymentMethod: MobilePaymentType.APPLE_PAY
+                })
+              }}
+            />
+          ) : null}
+
+          {googlePay && googlePayAvailable ? (
+            <MobilePayment
+              type='google'
+              onClick={() => {
+                handlePaymentMethodSelect({
+                  method: googlePay.value,
+                  mobilePaymentMethod: MobilePaymentType.GOOGLE_PAY
+                })
+              }}
+            />
+          ) : null}
+
+          {cardMethods
+            ? cardMethods.map((cardMethod, index) => (
                 <Card
                   // eslint-disable-next-line react/no-array-index-key
-                  key={index}
+                  key={`${index}-${cardMethod.value?.card?.number}`}
                   value={cardMethod.value}
-                  text={this.renderCardText(cardMethod.value)}
-                  icon={this.getIcon(cardMethod.value)}
-                  onClick={() => this.handleSubmit(cardMethod.value)}
+                  text={renderCardText(cardMethod.value)}
+                  icon={getIcon(cardMethod.value)}
+                  isBlocked={cardMethod.value?.state === BSCardStateEnum.BLOCKED}
+                  onClick={() => handlePaymentMethodSelect({ method: cardMethod.value })}
+                  onClickNabuErrorInfo={(error) =>
+                    addCard(
+                      <GenericNabuErrorCard
+                        error={error}
+                        variant={cardMethod.value.block ? 'error' : 'warning'}
+                        onActionClick={clearCard}
+                        onClickClose={clearCard}
+                      />
+                    )
+                  }
                 />
-              ))}
-            {bankMethods &&
-              bankMethods.map((bankMethod, index) => (
+              ))
+            : null}
+
+          {bankMethods
+            ? bankMethods.map((bankMethod, index) => (
                 <Bank
                   // eslint-disable-next-line react/no-array-index-key
                   key={index}
                   value={bankMethod.value}
-                  text={this.renderBankText(bankMethod.value)}
+                  text={renderBankText(bankMethod.value)}
                   icon={
                     bankMethod.value.details
-                      ? this.getLinkedBankIcon(bankMethod.value?.details?.bankName)
-                      : this.getIcon(bankMethod.value)
+                      ? getLinkedBankIcon(bankMethod.value?.details?.bankName)
+                      : getIcon(bankMethod.value)
                   }
-                  onClick={() => this.handleSubmit(bankMethod.value)}
+                  onClick={() => handlePaymentMethodSelect({ method: bankMethod.value })}
                 />
-              ))}
-            {orderType === OrderType.BUY && (
-              <AddNewButton data-e2e='addNewPaymentMethod' onClick={this.addNewPaymentMethod}>
-                <FormattedMessage id='buttons.add_new' defaultMessage='+ Add New' />
-              </AddNewButton>
-            )}
-          </PaymentsWrapper>
-        </Form>
+              ))
+            : null}
+
+          {orderType === OrderType.BUY ? (
+            <AddNewButton data-e2e='addNewPaymentMethod' onClick={addNewPaymentMethod}>
+              <FormattedMessage id='buttons.add_new' defaultMessage='+ Add New' />
+            </AddNewButton>
+          ) : null}
+        </PaymentsWrapper>
+
+        {card && (
+          <div style={{ flexShrink: 0 }}>
+            <Divider />
+            <Padding horizontal={40} vertical={20}>
+              {card}
+            </Padding>
+          </div>
+        )}
       </Wrapper>
-    )
-  }
+    </Form>
+  )
 }
 
 export default reduxForm<{}, Props>({

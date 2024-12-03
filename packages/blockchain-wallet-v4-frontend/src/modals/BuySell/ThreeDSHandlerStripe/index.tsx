@@ -1,47 +1,38 @@
-import React, { useEffect } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { connect, ConnectedProps } from 'react-redux'
 import { bindActionCreators } from 'redux'
-import styled from 'styled-components'
 
 import { WalletOptionsType } from '@core/types'
-import { FlyoutWrapper } from 'components/Flyout'
+import BaseError from 'components/BuySell/Error'
+import { GenericNabuErrorFlyout } from 'components/GenericNabuErrorFlyout'
 import { actions, selectors } from 'data'
+import { CARD_ERROR_CODE } from 'data/components/buySell/model'
 import { RootState } from 'data/rootReducer'
+import { useRemote } from 'hooks'
+import { isNabuError } from 'services/errors'
 
-const CustomFlyoutWrapper = styled(FlyoutWrapper)`
-  height: 100%;
-`
-const Iframe = styled.iframe`
-  border: 0;
-  width: 100%;
-  height: 100%;
-  margin-top: 16px;
-`
+import Loading from '../ThreeDSHandlerEverypay/template.loading'
+import Success from './template.success'
 
-const ThreeDSHandlerStripe = ({ buySellActions, domains, order }: Props) => {
+const ThreeDSHandlerStripe = (props: Props) => {
+  const [isPolling, setPolling] = useState(false)
+  const order = useRemote(() => props.orderR)
+
   const handlePostMessage = async ({
     data
   }: {
-    data: { details: any; status: 'error' | 'success' }
+    data: { provider: 'STRIPE'; status: 'ERROR' | 'SUCCESS' }
   }) => {
-    if (data.status === 'error') {
-      // TODO handle this error
-      // eslint-disable-next-line no-alert
-      window.alert('FAILED')
+    if (data.provider !== 'STRIPE') return
 
-      buySellActions.setStep({
-        fiatCurrency: 'USD',
-        step: 'CRYPTO_SELECTION'
-      })
-    } else if (data.status === 'success') {
-      if (!order) {
-        throw new Error('order not found')
-      }
+    setPolling(true)
 
-      buySellActions.setStep({
-        order,
-        step: 'ORDER_SUMMARY'
-      })
+    if (!order.data || data.status === 'ERROR') {
+      throw new Error('ORDER_NOT_FOUND')
+    }
+
+    if (data.status === 'SUCCESS') {
+      props.buySellActions.pollOrder({ orderId: order.data.id, waitUntilSettled: true })
     }
   }
 
@@ -51,12 +42,90 @@ const ThreeDSHandlerStripe = ({ buySellActions, domains, order }: Props) => {
     return () => window.removeEventListener('message', handlePostMessage, false)
   })
 
+  const handleRetry = useCallback(() => {
+    props.buySellActions.setStep({
+      step: 'DETERMINE_CARD_PROVIDER'
+    })
+  }, [props.buySellActions])
+
+  const handleBack = useCallback(() => {
+    if (order.data) {
+      return props.buySellActions.proceedToBuyConfirmation({
+        mobilePaymentMethod: props.mobilePaymentMethod,
+        paymentMethodId: order.data.paymentMethodId,
+        paymentType: order.data.paymentType
+      })
+    }
+
+    props.buySellActions.setStep({
+      step: 'DETERMINE_CARD_PROVIDER'
+    })
+  }, [order.data, props.buySellActions, props.mobilePaymentMethod])
+
+  const handleReset = useCallback(() => {
+    props.buySellActions.destroyCheckout()
+  }, [props.buySellActions])
+
+  const renderError = useCallback(
+    (error: unknown) => {
+      if (isNabuError(error)) {
+        return <GenericNabuErrorFlyout error={error} onDismiss={handleBack} />
+      }
+
+      return (
+        <BaseError
+          code={error}
+          handleReset={handleReset}
+          handleBack={handleBack}
+          handleRetry={handleRetry}
+        />
+      )
+    },
+    [handleReset, handleBack, handleRetry]
+  )
+
+  if (order.hasError && order.error) {
+    return renderError(order.error)
+  }
+
+  if (order.isLoading || order.isNotAsked) {
+    return <Loading />
+  }
+
+  if (isPolling) {
+    return <Loading polling order={order.hasData} />
+  }
+
+  let publishableApiKey = ''
+  let clientSecret = ''
+
+  if (order.data?.attributes?.cardProvider?.publishableApiKey) {
+    publishableApiKey = order.data?.attributes?.cardProvider.publishableApiKey
+  }
+
+  if (order.data?.attributes?.cardCassy?.publishableApiKey) {
+    publishableApiKey = order.data?.attributes?.cardCassy.publishableApiKey
+  }
+
+  if (order.data?.attributes?.cardProvider?.clientSecret) {
+    clientSecret = order.data?.attributes?.cardProvider.clientSecret
+  }
+
+  if (order.data?.attributes?.cardCassy?.clientSecret) {
+    clientSecret = order.data?.attributes?.cardCassy.clientSecret
+  }
+
+  if (!publishableApiKey || !clientSecret) {
+    return renderError(CARD_ERROR_CODE.CREATE_FAILED)
+  }
+
   return (
-    <CustomFlyoutWrapper>
-      <Iframe
-        src={`${domains.walletHelper}/wallet-helper/stripe/#/paymentLink/${order?.attributes?.cardProvider?.publishableApiKey}/${order?.attributes?.cardProvider?.clientSecret}`}
-      />
-    </CustomFlyoutWrapper>
+    <Success
+      handleBack={handleBack}
+      publishableApiKey={publishableApiKey}
+      clientSecret={clientSecret}
+      domains={props.domains}
+    />
   )
 }
 
@@ -64,7 +133,8 @@ const mapStateToProps = (state: RootState) => ({
   domains: selectors.core.walletOptions.getDomains(state).getOrElse({
     walletHelper: 'https://wallet-helper.blockchain.com'
   } as WalletOptionsType['domains']),
-  order: selectors.components.buySell.getBSOrder(state)
+  mobilePaymentMethod: selectors.components.buySell.getBSMobilePaymentMethod(state),
+  orderR: selectors.components.buySell.getBSOrder(state)
 })
 
 const mapDispatchToProps = (dispatch) => ({
@@ -78,5 +148,9 @@ type OwnProps = {
 }
 
 export type Props = OwnProps & ConnectedProps<typeof connector>
+
+export type SuccessStateType = {
+  domains: WalletOptionsType['domains']
+}
 
 export default connector(ThreeDSHandlerStripe)

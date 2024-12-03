@@ -3,6 +3,7 @@ import { call, put, select } from 'redux-saga/effects'
 
 import { Types, utils } from '@core'
 import profileSagas from 'data/modules/profile/sagas.ts'
+import { ModalName } from 'data/types'
 import * as C from 'services/alerts'
 import { addLanguageToUrl } from 'services/locales'
 import { askSecondPasswordEnhancer, promptForSecondPassword } from 'services/sagas'
@@ -60,7 +61,7 @@ export default ({ api, coreSagas }) => {
         coreSagas.settings.requestGoogleAuthenticatorSecretUrl
       )
       yield put(
-        actions.modals.showModal('TWO_STEP_GOOGLE_AUTH_MODAL', {
+        actions.modals.showModal(ModalName.TWO_STEP_GOOGLE_AUTH_MODAL, {
           googleAuthenticatorSecretUrl
         })
       )
@@ -71,7 +72,9 @@ export default ({ api, coreSagas }) => {
 
   const updateMobile = function* (action) {
     try {
-      yield call(coreSagas.settings.setMobile, action.payload)
+      const nabuSessionToken = (yield select(selectors.modules.profile.getApiToken)).getOrFail()
+      const { mobile } = action.payload
+      yield call(coreSagas.settings.setMobile, mobile, nabuSessionToken)
       yield call(syncUserWithWallet)
       yield put(actions.alerts.displaySuccess(C.MOBILE_UPDATE_SUCCESS))
     } catch (e) {
@@ -83,7 +86,9 @@ export default ({ api, coreSagas }) => {
 
   const resendMobile = function* (action) {
     try {
-      yield call(coreSagas.settings.setMobile, action.payload)
+      const { mobile } = action.payload
+      const nabuSessionToken = (yield select(selectors.modules.profile.getApiToken)).getOrFail()
+      yield call(coreSagas.settings.setMobile, mobile, nabuSessionToken)
       yield put(actions.alerts.displaySuccess(C.SMS_RESEND_SUCCESS))
     } catch (e) {
       yield put(actions.logs.logErrorMessage(logLocation, 'resendMobile', e))
@@ -128,6 +133,23 @@ export default ({ api, coreSagas }) => {
     } catch (e) {
       yield put(actions.logs.logErrorMessage(logLocation, 'updateCurrency', e))
       yield put(actions.alerts.displayError(C.CURRENCY_UPDATE_ERROR))
+    }
+  }
+
+  const updateTradingCurrency = function* (action) {
+    try {
+      yield call(coreSagas.settings.setTradingCurrency, action.payload)
+      if (!action.payload.hideAlert) {
+        yield put(actions.alerts.displaySuccess(C.TRADING_CURRENCY_UPDATE_SUCCESS))
+      }
+      // update prices based on new currency
+      yield put(actions.prices.fetchCoinPrices())
+      yield put(actions.prices.fetchCoinPricesPreviousDay())
+      yield put(actions.core.data.coins.fetchCoinsRates())
+      yield put(actions.modules.profile.fetchUser())
+    } catch (e) {
+      yield put(actions.logs.logErrorMessage(logLocation, 'updateTradingCurrency', e))
+      yield put(actions.alerts.displayError(C.TRADING_CURRENCY_UPDATE_ERROR))
     }
   }
 
@@ -325,6 +347,7 @@ export default ({ api, coreSagas }) => {
     updateLanguage,
     updateLoggingLevel,
     updateMobile,
+    updateTradingCurrency,
     updateTwoStepRemember,
     verifyMobile
   }

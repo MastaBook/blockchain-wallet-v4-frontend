@@ -80,7 +80,7 @@ export const isLatestVersion = (wrapper) => {
 }
 
 export const upgradeToV3 = curry((mnemonic, password, network, wrapper) => {
-  const upgradeWallet = Wallet.upgradeToV3(mnemonic, 'BTC Private Key Wallet', password, network)
+  const upgradeWallet = Wallet.upgradeToV3(mnemonic, 'BTC DeFi Wallet', password, network)
 
   const upgradeWrapper = compose(traverseWallet(Task.of, upgradeWallet), set(version, 3.0))
 
@@ -142,6 +142,7 @@ export const fromEncPayload = curry((password, payload) => {
   const wrapper = {
     password,
     payload: JSON.stringify(payload),
+    payload_checksum: crypto.sha256(JSON.stringify(payload)).toString('hex'),
     pbkdf2Iterations,
     version
   }
@@ -209,7 +210,7 @@ export const createNew = (
   sharedKey,
   mnemonic,
   language,
-  firstAccountName = 'Private Key Wallet',
+  firstAccountName = 'DeFi Wallet',
   nAccounts = 1,
   network
 ) => fromJS(js(password, guid, sharedKey, firstAccountName, mnemonic, language, nAccounts, network))

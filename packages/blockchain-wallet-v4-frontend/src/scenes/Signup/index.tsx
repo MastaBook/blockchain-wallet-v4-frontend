@@ -1,19 +1,30 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { connect, ConnectedProps } from 'react-redux'
-import { find, pathOr, propEq } from 'ramda'
+import { pathOr } from 'ramda'
 import { bindActionCreators, compose, Dispatch } from 'redux'
 import { InjectedFormProps, reduxForm } from 'redux-form'
 import styled from 'styled-components'
 
 import { Remote } from '@core'
-import { RemoteDataType } from '@core/types'
+import { RemoteDataType, WalletOptionsType } from '@core/types'
+import { Image } from 'blockchain-info-components'
+import { UkBanner } from 'components/Banner'
 import { actions, selectors } from 'data'
 import { RootState } from 'data/rootReducer'
+import {
+  GoalsType,
+  ProductAuthMetadata,
+  ProductSignupMetadata,
+  RegisteringFailureType,
+  RegisteringSuccessType
+} from 'data/types'
 
 import BuyGoal from './BuyGoal'
+import Header from './components/Header'
+import SignupCard from './components/SignupCard'
+import SofiSignupCard from './components/SofiSignupCard'
 import ExchangeLinkGoal from './ExchangeLinkGoal'
-import SignupLanding from './SignupLanding'
-import { GeoLocationType, GoalDataType, SignupFormInitValuesType, SignupFormType } from './types'
+import { GoalDataType, SignupFormInitValuesType, SignupFormType } from './types'
 
 const SignupWrapper = styled.div`
   display: flex;
@@ -22,124 +33,194 @@ const SignupWrapper = styled.div`
   align-items: center;
 `
 
-const SIGNUP_FORM = 'register'
+const LatamPhone = styled.div`
+  display: flex;
+  flex-direction: column;
+  margin-left: 100px;
+  color: white;
+  @media (max-width: 768px) {
+    margin-left: 0;
+    position: relative;
+    top: 50px;
+    align-items: center;
+  }
+`
 
-class SignupContainer extends React.PureComponent<
-  InjectedFormProps<{}, Props> & Props,
-  StateProps
-> {
-  constructor(props) {
-    super(props)
-    this.state = {
-      showForm: props.search.includes('showWallet'),
-      showState: false
-    }
+const LatamWrapper = styled.div`
+  display: flex;
+  flex-direction: row;
+  @media (max-width: 768px) {
+    flex-direction: column;
+    align-items: center;
+  }
+`
+
+const UKHeaderWrapper = styled.div`
+  position: absolute;
+  width: 100vw;
+  top: 0;
+  z-index: 2;
+`
+export const SIGNUP_FORM = 'register'
+
+const isLatam = new URLSearchParams(window.location.hash).has('latam')
+
+const findGoalByName = (name: GoalsType, goals: GoalDataType) =>
+  goals.find((goal) => goal.name === name)
+
+const SignupContainer: React.FC<InjectedFormProps<{}, Props> & Props> = (props) => {
+  const [showForm, setShowForm] = useState(true)
+  const [showState, setShowState] = useState(false)
+
+  const setDefaultCountry = (country: string) => {
+    setShowState(country === 'US')
   }
 
-  componentDidMount() {
-    const { authActions, websocketActions } = this.props
+  const onCountryChange = (e: React.ChangeEvent<HTMLInputElement> | undefined, value: string) => {
+    setDefaultCountry(value)
+    props.formActions.clearFields(SIGNUP_FORM, false, false, 'state')
+  }
+
+  const onSubmit = (e) => {
+    e.preventDefault()
+    const { formValues, language, signupActions } = props
+    const { country, email, password, referral, state } = formValues
+
+    signupActions.register({
+      country,
+      email,
+      language,
+      password,
+      referral,
+      state
+    })
+  }
+
+  const setCountryOnLoad = (country: string) => {
+    setDefaultCountry(country)
+    props.formActions.change(SIGNUP_FORM, 'country', country)
+  }
+
+  const toggleSignupFormVisibility = () => {
+    setShowForm(true)
+  }
+
+  useEffect(() => {
+    const { signupActions, websocketActions } = props
     // start sockets to ensure email verify flow is detected
     websocketActions.startSocket()
-    authActions.getUserGeoLocation()
-  }
-
-  onSubmit = (e) => {
-    e.preventDefault()
-    const { authActions, formValues, language } = this.props
-    const { country, email, password, state } = formValues
-    authActions.register({ country, email, language, password, state })
-  }
-
-  toggleSignupFormVisibility = () => {
-    this.setState({ showForm: true })
-  }
-
-  onCountryChange = (e: React.ChangeEvent<any> | undefined, value: string) => {
-    this.setDefaultCountry(value)
-    this.props.formActions.clearFields(SIGNUP_FORM, false, false, 'state')
-  }
-
-  setDefaultCountry = (country: string) => {
-    this.setState({ showState: country === 'US' })
-  }
-
-  setCountryOnLoad = (country: string) => {
-    this.setDefaultCountry(country)
-    this.props.formActions.change(SIGNUP_FORM, 'country', country)
-  }
-
-  render() {
-    const { goals, isLoadingR, signupCountryEnabled } = this.props
-    const isFormSubmitting = Remote.Loading.is(isLoadingR)
-
-    // pull email from simple buy goal if it exists
-    const email = pathOr('', ['data', 'email'], find(propEq('name', 'buySell'), goals))
-    const signupInitialValues = (email ? { email } : {}) as SignupFormInitValuesType
-    const isLinkAccountGoal = !!find(propEq('name', 'linkAccount'), goals)
-    const isBuyGoal = !!find(propEq('name', 'buySell'), goals)
-
-    const subviewProps = {
-      initialValues: signupInitialValues,
-      isFormSubmitting,
-      isLinkAccountGoal,
-      onCountrySelect: this.onCountryChange,
-      onSignupSubmit: this.onSubmit,
-      setDefaultCountry: this.setCountryOnLoad,
-      showForm: this.state.showForm,
-      showState: this.state.showState,
-      signupCountryEnabled,
-      toggleSignupFormVisibility: this.toggleSignupFormVisibility,
-      ...this.props
+    signupActions.initializeSignup()
+    if (window?._SardineContext) {
+      window._SardineContext.updateConfig({
+        flow: 'SIGNUP'
+      })
     }
+  }, [])
 
-    return (
+  const { formValues, goals, isLoadingR, productAuthMetadata } = props
+  const isFormSubmitting = Remote.Loading.is(isLoadingR)
+  const isUserInUK = productAuthMetadata?.ipCountry === 'GB'
+  const userSelectedUK = formValues?.country === 'GB'
+
+  const buySellGoal = findGoalByName('buySell', goals)
+  const signupGoal = findGoalByName('signup', goals)
+  const linkAccountGoal = findGoalByName('linkAccount', goals)
+
+  // pull email from simple buy goal if it exists or signup goal
+  const email =
+    pathOr('', ['data', 'email'], buySellGoal) || pathOr('', ['data', 'email'], signupGoal)
+
+  const signupInitialValues = (email ? { email } : {}) as SignupFormInitValuesType
+  const isLinkAccountGoal = !!linkAccountGoal
+  const isBuyGoal = !!buySellGoal
+  const isSofi = window.location.hash.includes('sofi')
+
+  const subviewProps = {
+    isFormSubmitting,
+    isLinkAccountGoal,
+    onCountrySelect: onCountryChange,
+    onSignupSubmit: onSubmit,
+    setDefaultCountry: setCountryOnLoad,
+    showForm,
+    showState,
+    toggleSignupFormVisibility,
+    ...props, // order here matters as we may need to override initial form values!
+    initialValues: signupInitialValues
+  }
+
+  return (
+    <>
+      {(isUserInUK || userSelectedUK) && (
+        <UKHeaderWrapper>
+          <UkBanner userLoggedOut />
+        </UKHeaderWrapper>
+      )}
       <SignupWrapper>
+        {isSofi && <SofiSignupCard {...subviewProps} />}
+        {isLatam && <Header />}
         {isLinkAccountGoal && <ExchangeLinkGoal {...subviewProps} />}
         {isBuyGoal && <BuyGoal {...subviewProps} />}
-        {!isLinkAccountGoal && !isBuyGoal && <SignupLanding {...subviewProps} />}
+        {!isLinkAccountGoal && !isBuyGoal && !isLatam && !isSofi && (
+          <SignupCard {...subviewProps} />
+        )}
+        {!isLinkAccountGoal && !isBuyGoal && !isSofi && isLatam && (
+          <LatamWrapper>
+            <SignupCard {...subviewProps} />
+            <LatamPhone>
+              <Image width='569px' name='latam-signup-phone' />
+            </LatamPhone>
+          </LatamWrapper>
+        )}
       </SignupWrapper>
-    )
-  }
+    </>
+  )
 }
 
 const mapStateToProps = (state: RootState): LinkStatePropsType => ({
+  bakktRedirectUSStates: selectors.core.walletOptions.getBakktRedirectUSStates(state).getOrElse([]),
+  domains: selectors.core.walletOptions
+    .getDomains(state)
+    .getOrElse({}) as WalletOptionsType['domains'],
   formValues: selectors.form.getFormValues(SIGNUP_FORM)(state) as SignupFormType,
   goals: selectors.goals.getGoals(state) as GoalDataType,
-  isLoadingR: selectors.auth.getRegistering(state) as RemoteDataType<string, undefined>,
-  language: selectors.preferences.getLanguage(state),
-  search: selectors.router.getSearch(state) as string,
-  signupCountryEnabled: selectors.core.walletOptions
-    .getFeatureSignupCountry(state)
+  isLoadingR: selectors.signup.getRegistering(state) as RemoteDataType<string, undefined>,
+  isReferralEnabled: selectors.core.walletOptions
+    .getReferralEnabled(state)
     .getOrElse(false) as boolean,
-  userGeoData: selectors.auth.getUserGeoData(state) as GeoLocationType
+  isValidReferralCode: selectors.signup.getIsValidReferralCode(state),
+  language: selectors.preferences.getLanguage(state),
+  productAuthMetadata: selectors.auth.getProductAuthMetadata(state),
+  registering: selectors.signup.getRegistering(state),
+  search: selectors.router.getSearch(state) as string,
+  signupMetadata: selectors.signup.getProductSignupMetadata(state) as ProductSignupMetadata
 })
 
 const mapDispatchToProps = (dispatch: Dispatch) => ({
-  alertActions: bindActionCreators(actions.alerts, dispatch),
   authActions: bindActionCreators(actions.auth, dispatch),
   formActions: bindActionCreators(actions.form, dispatch),
+  routerActions: bindActionCreators(actions.router, dispatch),
+  signupActions: bindActionCreators(actions.signup, dispatch),
   websocketActions: bindActionCreators(actions.ws, dispatch)
 })
 
 const connector = connect(mapStateToProps, mapDispatchToProps)
 
 type LinkStatePropsType = {
+  bakktRedirectUSStates: WalletOptionsType['bakktRedirectUSStates']
+  domains: WalletOptionsType['domains']
   formValues: SignupFormType
   goals: GoalDataType
   isLoadingR: RemoteDataType<string, undefined>
+  isReferralEnabled: boolean
+  isValidReferralCode?: boolean
   language: string
+  productAuthMetadata: ProductAuthMetadata
+  registering: RemoteDataType<RegisteringFailureType, RegisteringSuccessType>
   search: string
-  signupCountryEnabled: boolean
-  userGeoData: GeoLocationType
+  signupMetadata: ProductSignupMetadata
 }
-type StateProps = {
-  showForm: boolean
-  showState: boolean
-}
-type ownProps = {
-  setDefaultCountry: (country: string) => void
-}
-export type Props = ConnectedProps<typeof connector> & LinkStatePropsType & ownProps
+
+export type Props = ConnectedProps<typeof connector> & LinkStatePropsType
 
 const enhance = compose(reduxForm<{}, Props>({ form: SIGNUP_FORM }), connector)
 

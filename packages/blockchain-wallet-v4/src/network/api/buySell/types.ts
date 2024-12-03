@@ -1,11 +1,15 @@
-import { BeneficiaryType, CoinType, FiatType, WalletCurrencyType } from '@core/types'
-import { CardNameType } from 'components/Form/CreditCardBox/model'
-import { BankDetails, RecurringBuyFailureReasons, RecurringBuyPeriods } from 'data/types'
+import { CardNameType } from 'blockchain-wallet-v4-frontend/src/modals/BuySell/PaymentMethods/model'
 
-export type Everypay3DSResponseType = {
-  payment_state: null | 'waiting_for_3DS_response'
-  processing_errors: null
-}
+import { BeneficiaryType, CoinType, FiatType, WalletCurrencyType } from '@core/types'
+import { ORDER_ERROR_CODE } from 'data/components/buySell/model'
+import {
+  BankDetails,
+  DepositTerms,
+  PlaidSettlementErrorReasons,
+  RecurringBuyFailureReasons,
+  RecurringBuyPeriods
+} from 'data/types'
+import { NabuErrorProps } from 'services/errors'
 
 export type IBSAccountType = {
   address: string
@@ -23,28 +27,49 @@ type AgentSimple = {
 export type AgentType = AgentSimple & {
   accountType: string
   address: string
+  bankName: string
   country: string
+  holderDocument: string
+  intermediaryAddress: string
+  intermediaryName: string
+  intermediarySwiftCode: string
+  label: string
   recipientAddress: string
   routingNumber: string
   swiftCode: string
 }
 
-export type BSAccountType =
-  | (IBSAccountType & {
-      agent: AgentType
-      currency: 'USD'
-    })
-  | (IBSAccountType & {
-      agent: AgentSimple
-      currency: 'EUR'
-    })
-  | (IBSAccountType & {
-      agent: AgentSimple
-      currency: 'GBP'
-    })
+export type BSAccountContent = {
+  footers: Array<{
+    actions?: Array<{
+      title: string
+      url: string
+    }>
+    icon?: string
+    id: string
+    isImportant?: boolean
+    message: string
+    title: string
+  }>
+  sections: Array<{
+    entries: Array<{
+      id: string
+      message: string
+      title: string
+    }>
+    name: string
+  }>
+}
+
+export type BSAccountType = IBSAccountType & {
+  agent: AgentType
+  content: BSAccountContent
+  currency: 'USD' | 'EUR' | 'GBP' | 'ARS'
+}
 
 export type BSBalanceType = {
   available: string
+  mainBalanceToDisplay?: string
   pending: string
   withdrawable: string
 }
@@ -61,6 +86,7 @@ export type CustodialFromType = BSBalanceType & {
 export type NabuAddressType = {
   city: string
   country: string
+  countryCode?: string
   line1: string
   line2?: string
   postCode: string
@@ -88,6 +114,7 @@ export type BSCardType = {
     min: string
   }
   partner: BSCardPartnerType
+  // TODO: add lastError here
 } & (
   | {
       card: BSCard
@@ -119,11 +146,29 @@ export enum BSPaymentTypes {
   USER_CARD = 'USER_CARD'
 }
 
+export enum MobilePaymentType {
+  APPLE_PAY = 'APPLE_PAY',
+  GOOGLE_PAY = 'GOOGLE_PAY'
+}
+
+export enum CardFundSourceType {
+  CREDIT = 'CREDIT',
+  DEBIT = 'DEBIT',
+  PREPAID = 'PREPAID'
+}
+
+type Capabilities = 'DEPOSIT' | 'WITHDRAWAL' | 'BROKERAGE'
+
 export type BSPaymentMethodType = {
   addedAt?: string
   address?: null | NabuAddressType
-  attributes?: {}
+  attributes?: {
+    requiresRefresh?: true
+  }
+  block?: boolean
+  capabilities?: Capabilities[]
   card?: BSCard
+  cardFundSources?: CardFundSourceType[]
   currency: FiatType
   details?: BankDetails
   eligible?: boolean
@@ -133,9 +178,11 @@ export type BSPaymentMethodType = {
     max: string
     min: string
   }
+  mobilePayment?: MobilePaymentType[]
   state?: 'ACTIVE' | Exclude<BSCardStateType, 'ACTIVE'>
   subTypes?: [] | [CardNameType]
   type: BSPaymentTypes
+  ux?: NabuErrorProps
 }
 
 export type BSPaymentMethodsType = {
@@ -143,14 +190,65 @@ export type BSPaymentMethodsType = {
   methods: Array<BSPaymentMethodType>
 }
 
-export type BSProviderAttributesType = {
+export type OrderConfirmAttributesType =
+  | CardConfirmAttributesType
+  | YapilyConfirmAttributesType
+  | ApplePayConfirmAttributesType
+  | GooglePayConfirmAttributesType
+
+export type CardConfirmAttributesType = {
   everypay: {
     customerUrl: string
   }
-  redirectUrl: string
+  isAsync?: boolean
+  redirectURL: string
+}
+
+export type ApplePayConfirmAttributesType = CardConfirmAttributesType & {
+  applePayPaymentToken: string
+  paymentContact: {
+    city: ApplePayJS.ApplePayPaymentContact['locality']
+    country: ApplePayJS.ApplePayPaymentContact['country']
+    email: ApplePayJS.ApplePayPaymentContact['emailAddress']
+    firstname: ApplePayJS.ApplePayPaymentContact['givenName']
+    lastname: ApplePayJS.ApplePayPaymentContact['familyName']
+    line1?: string
+    line2?: string
+    phone: ApplePayJS.ApplePayPaymentContact['phoneNumber']
+    postCode: ApplePayJS.ApplePayPaymentContact['postalCode']
+    state: ApplePayJS.ApplePayPaymentContact['administrativeArea']
+  } | null
+}
+
+export type GooglePayConfirmAttributesType = CardConfirmAttributesType & {
+  googlePayPayload: string
+  paymentContact: {
+    city: google.payments.api.Address['locality']
+    country: google.payments.api.Address['countryCode']
+    firstname: google.payments.api.Address['name']
+    lastname: google.payments.api.Address['name']
+    line1: google.payments.api.Address['address1']
+    line2: google.payments.api.Address['address2']
+    middleName: google.payments.api.Address['name']
+    phoneNumber: google.payments.api.Address['phoneNumber']
+    postCode: google.payments.api.Address['postalCode']
+    state: google.payments.api.Address['administrativeArea']
+  } | null
+}
+
+export type YapilyConfirmAttributesType = {
+  callback: string
 }
 
 export type ProviderDetailsType = {
+  cardProvider: {
+    cardAcquirerAccountCode: string
+    cardAcquirerName: CardAcquirerName
+    clientSecret: string
+    paymentLink: string
+    paymentState: string
+    publishableApiKey: string
+  }
   everypay: {
     apiUsername: string
     mobileToken: string
@@ -169,9 +267,25 @@ export type BSMoneyType = {
 export type BSOrderProperties = {
   attributes?: {
     authorisationUrl?: string
+    cardCassy?: {
+      cardAcquirerAccountCode: string
+      cardAcquirerName: 'CHECKOUTDOTCOM' | 'STRIPE' | 'EVERYPAY' | 'FAKE_CARD_ACQUIRER'
+      clientSecret: string
+      paymentLink: string
+      paymentState:
+        | 'INITIAL'
+        | 'WAITING_FOR_3DS_RESPONSE'
+        | 'CONFIRMED_3DS'
+        | 'SETTLED'
+        | 'VOIDED'
+        | 'ABANDONED'
+        | 'FAILED'
+        | null
+      publishableApiKey: string
+    }
     cardProvider?: {
       cardAcquirerAccountCode: string
-      cardAcquirerName: 'CHECKOUTDOTCOM' | 'STRIPE' | 'EVERYPAY'
+      cardAcquirerName: 'CHECKOUTDOTCOM' | 'STRIPE' | 'EVERYPAY' | 'FAKE_CARD_ACQUIRER'
       clientSecret: string
       paymentLink: string
       paymentState:
@@ -199,9 +313,11 @@ export type BSOrderProperties = {
         | null
     }
     expiresAt?: string
+    needCvv?: boolean
     paymentId: string
     qrcodeUrl?: string
   }
+  depositPaymentId?: string
   expiresAt: string
   failureReason?: RecurringBuyFailureReasons
   fee?: string
@@ -209,8 +325,12 @@ export type BSOrderProperties = {
   inputQuantity: string
   insertedAt: string
   outputQuantity: string
+  paymentError?: ORDER_ERROR_CODE
   paymentMethodId?: string
-  paymentType?: BSPaymentMethodType['type']
+  paymentType: Exclude<
+    BSPaymentMethodType['type'],
+    BSPaymentTypes.USER_CARD | BSPaymentTypes.BANK_ACCOUNT
+  >
   period?: RecurringBuyPeriods
   price?: string
   recurringBuyId?: string
@@ -253,6 +373,14 @@ export type BSQuoteType = {
   time: string
 }
 
+export enum BSTransactionExtraAttributesStatuses {
+  CLEARED = 'CLEARED',
+  COMPLETED = 'COMPLETED',
+  CONFIRMED = 'CONFIRMED',
+  FAILED = 'FAILED',
+  UNCONFIRMED = 'UNCONFIRMED'
+}
+
 export type BSTransactionType = {
   amount: { symbol: WalletCurrencyType; value: string }
   amountMinor: string
@@ -272,7 +400,7 @@ export type BSTransactionType = {
         hash: string
         id: string
         qrcodeUrl?: string
-        status: 'UNCONFIRMED' | 'CONFIRMED' | 'COMPLETED' | 'CLEARED' | 'FAILED'
+        status: keyof typeof BSTransactionExtraAttributesStatuses
         txHash: string
       }
       type: 'DEPOSIT' | 'REFUNDED' | 'SELL'
@@ -300,20 +428,24 @@ export type BSTransactionsType = {
   prev: string | null
 }
 
-export type BSTransactionStateType =
-  | 'CREATED'
-  | 'PENDING'
-  | 'PENDING_DEPOSIT'
-  | 'UNIDENTIFIED'
-  | 'FAILED'
-  | 'FRAUD_REVIEW'
-  | 'MANUAL_REVIEW'
-  | 'REJECTED'
-  | 'CLEARED'
-  | 'COMPLETE'
-  | 'REFUNDED'
-  | 'CANCELED'
-  | 'EXPIRED'
+export enum BSTransactionStateEnum {
+  CANCELED = 'CANCELED',
+  CLEARED = 'CLEARED',
+  COMPLETE = 'COMPLETE',
+  COMPLETED = 'COMPLETED',
+  CREATED = 'CREATED',
+  EXPIRED = 'EXPIRED',
+  FAILED = 'FAILED',
+  FRAUD_REVIEW = 'FRAUD_REVIEW',
+  MANUAL_REVIEW = 'MANUAL_REVIEW',
+  PENDING = 'PENDING',
+  PENDING_DEPOSIT = 'PENDING_DEPOSIT',
+  REFUNDED = 'REFUNDED',
+  REJECTED = 'REJECTED',
+  UNIDENTIFIED = 'UNIDENTIFIED'
+}
+
+export type BSTransactionStateType = keyof typeof BSTransactionStateEnum
 
 export enum BSPendingTransactionStateEnum {
   CLEARED = 'CLEARED',
@@ -341,10 +473,115 @@ export type Limits = {
   min: string
 }
 
-type CardAcquirerName = 'stripe' | 'checkout'
+type CardAcquirerName = 'STRIPE' | 'CHECKOUTDOTCOM' | 'EVERYPAY'
 
 export type CardAcquirer = {
   apiKey: string
   cardAcquirerAccountCodes: string[]
   cardAcquirerName: CardAcquirerName
+}
+
+export type BuyQuoteType = {
+  depositTerms?: DepositTerms
+  feeDetails: {
+    fee: string
+    feeFlags: []
+    feeWithoutPromo: string
+  }
+  networkFee: string | null
+  price: string
+  quoteCreatedAt: string
+  quoteExpiresAt: string
+  quoteId: string
+  quoteMarginPercent: number
+  resultAmount: string
+  sampleDepositAddress: null
+  settlementDetails: {
+    availability: string
+    reason: PlaidSettlementErrorReasons
+  }
+  staticFee: string | null
+}
+
+export enum TermType {
+  ALL = 'ALL',
+  DAY = 'DAY',
+  MONTH = 'MONTH',
+  WEEK = 'WEEK',
+  YEAR = 'YEAR'
+}
+
+export type TradeAccumulatedItem = {
+  amount: {
+    symbol: FiatType
+    value: string
+  }
+  termType: TermType
+}
+
+export type TradesAccumulatedResponse = {
+  tradesAccumulated: Array<TradeAccumulatedItem>
+}
+
+export type ApplePayInfoType = {
+  allowCreditCards: boolean
+  allowPrepaidCards: boolean
+  applePayMerchantID: string
+  beneficiaryID: string
+  cardAcquirerName: 'STRIPE' | 'CHECKOUTDOTCOM'
+  merchantBankCountryCode: string
+  publishableApiKey: string
+  requiredBillingContactFields: ApplePayJS.ApplePayPaymentRequest['requiredBillingContactFields']
+  supportedCountries: ApplePayJS.ApplePayPaymentRequest['supportedCountries']
+  supportedNetworks: ApplePayJS.ApplePayPaymentRequest['supportedNetworks']
+}
+
+export type ValidateApplePayMerchantRequest = {
+  beneficiaryID: string
+  domain: string
+  validationURL: string
+}
+
+export type ValidateApplePayMerchantResponse = {
+  applePayPayload: string
+}
+
+export type GooglePayInfoType = {
+  allowCreditCards: boolean
+  allowPrepaidCards: boolean
+  allowedAuthMethods: google.payments.api.CardAuthMethod[]
+  allowedCardNetworks: google.payments.api.CardNetwork[]
+  apiKey: string
+  beneficiaryID: string
+  billingAddressParameters: google.payments.api.BillingAddressParameters
+  billingAddressRequired: boolean
+  cardAcquirerName: 'STRIPE' | 'CHECKOUTDOTCOM'
+  googlePayParameters: string
+  merchantBankCountry: string
+}
+
+export type CardSuccessRateResponse = {
+  block: boolean
+  ux?: {
+    actions: {
+      title: string
+      type: string
+      url: string
+    }[]
+    categories: string[]
+    message: string
+    title: string
+  }
+}
+
+export type BuyOrderInputDto = {
+  action: BSOrderActionType
+  input: BSMoneyType
+  output: BSMoneyType
+  pair: BSPairsType
+  paymentMethodId?: BSCardType['id']
+  paymentType: BSPaymentMethodType['type']
+  pending: boolean
+  period?: RecurringBuyPeriods
+  quoteId?: string
 }

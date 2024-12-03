@@ -1,8 +1,6 @@
-import moment from 'moment'
 import { defaultTo, filter } from 'ramda'
 
 import {
-  BSCardType,
   BSOrderActionType,
   BSOrderType,
   BSPairsType,
@@ -17,7 +15,6 @@ import {
 
 import { BankTransferAccountType } from '../brokerage/types'
 import { convertBaseToStandard } from '../exchange/services'
-import { BSAddCardFormValuesType } from './types'
 
 export const DEFAULT_BS_BALANCE = {
   available: '0',
@@ -30,25 +27,106 @@ export const DEFAULT_BS_METHODS = {
   methods: []
 }
 
-export const POLLING = {
+export const ORDER_POLLING = {
   RETRY_AMOUNT: 30,
-  SECONDS: 10
+  SECONDS: 10000
+}
+
+export const CARD_ORDER_POLLING = {
+  RETRY_AMOUNT: 10,
+  SECONDS: 5000
 }
 
 export const LIMIT = { max: '10000', min: '500' } as Limits
 export const LIMIT_FACTOR = 100 // we get 10000 from API
 
-export const SDD_TIER = 3
+export enum BS_ERROR {
+  APPLE_PAY_INFO_NOT_FOUND = 'APPLE_PAY_INFO_NOT_FOUND',
+  APPLE_PAY_SESSION_NOT_SUPPORTED = 'APPLE_PAY_SESSION_NOT_SUPPORTED',
+  CARD_CREATION_FAILED = 'CARD_CREATION_FAILED',
+  CHECKOUTDOTCOM_NOT_FOUND = 'CHECKOUTDOTCOM_NOT_FOUND',
+  FAILED_TO_VALIDATE_APPLE_PAY_MERCHANT = 'FAILED_TO_VALIDATE_APPLE_PAY_MERCHANT',
+  GOOGLE_PAY_INFO_NOT_FOUND = 'GOOGLE_PAY_INFO_NOT_FOUND',
+  GOOGLE_PAY_PARAMETERS_MALFORMED = 'GOOGLE_PAY_PARAMETERS_MALFORMED',
+  GOOGLE_PAY_PARAMETERS_NOT_FOUND = 'GOOGLE_PAY_PARAMETERS_NOT_FOUND',
+  NO_ACCOUNT = 'NO_ACCOUNT',
+  NO_ADDRESS = 'NO_ADDRESS',
+  NO_AMOUNT = 'NO_AMOUNT',
+  NO_FIAT_CURRENCY = 'NO_FIAT_CURRENCY',
+  NO_ORDER_EXISTS = 'NO_ORDER_EXISTS_TO_CONFIRM',
+  NO_PAIR_SELECTED = 'NO_PAIR_SELECTED',
+  NO_PAYMENT_METHODS = 'NO_PAYMENT_METHODS',
+  NO_PAYMENT_TYPE = 'NO_PAYMENT_TYPE',
+  NO_QUOTE = 'NO_QUOTE',
+  NO_USER_DATA = 'NO_USER_DATA',
+  ORDER_NOT_FOUND = 'ORDER_NOT_FOUND',
+  ORDER_VALUE_CHANGED = 'ORDER_VALUE_CHANGED',
+  ORDER_VERIFICATION_TIMED_OUT = 'ORDER_VERIFICATION_TIMED_OUT',
+  ORDER_VERIFICATION_UNEXPECTED_ERROR = 'ORDER_VERIFICATION_UNEXPECTED_ERROR',
+  RETRYING_TO_GET_AUTH_URL = 'RETRYING_TO_GET_AUTH_URL',
+  UNHANDLED_PAYMENT_STATE = 'UNHANDLED_PAYMENT_STATE',
+  USER_CANCELLED_APPLE_PAY = 'USER_CANCELLED_APPLE_PAY',
+  USER_CANCELLED_GOOGLE_PAY = 'USER_CANCELLED_GOOGLE_PAY'
+}
 
-export const NO_CHECKOUT_VALUES = 'No checkout values'
-export const NO_PAIR_SELECTED = 'NO_PAIR_SELECTED'
-export const NO_ACCOUNT = 'NO_ACCOUNT'
-export const NO_PAYMENT_TYPE = 'NO_PAYMENT_TYPE'
-export const NO_FIAT_CURRENCY = 'NO_FIAT_CURRENCY'
-export const NO_ORDER_EXISTS = 'NO_ORDER_EXISTS_TO_CONFIRM'
+export enum CARD_ERROR_CODE {
+  INTERNAL_SERVER_ERROR = 1,
+  INSUFFICIENT_FUNDS = 10000,
+  BANK_DECLINE = 10001,
+  DUPLICATE = 10002,
+  BLOCKCHAIN_DECLINE = 10003,
+  ACQUIRER_DECLINE = 10004,
+  PAYMENT_NOT_SUPPORTED = 10005,
+  CREATE_FAILED = 10006,
+  PAYMENT_FAILED = 10007,
+  CREATE_DEBIT_ONLY = 10011,
+  PAYMENT_DEBIT_ONLY = 10012,
+  INVALID_PAYMENT_METHOD = 135,
+  PENDING_CARD_AFTER_POLL = 'PENDING_CARD_AFTER_POLL',
+  BLOCKED_CARD_AFTER_POLL = 'BLOCKED_CARD_AFTER_POLL',
+  LINK_CARD_FAILED = 'LINK_CARD_FAILED'
+}
 
-// FORMS
-export const FORM_BS_ADD_EVERYPAY_CARD = 'addCardEverypayForm'
+export enum ORDER_ERROR_CODE {
+  CARD_CREATE_ABANDONED = 'CARD_CREATE_ABANDONED',
+  CARD_CREATE_BANK_DECLINED = 'CARD_CREATE_BANK_DECLINED',
+  CARD_CREATE_DEBIT_ONLY = 'CARD_CREATE_DEBIT_ONLY',
+  CARD_CREATE_DUPLICATE = 'CARD_CREATE_DUPLICATE',
+  CARD_CREATE_EXPIRED = 'CARD_CREATE_EXPIRED',
+  CARD_CREATE_FAILED = 'CARD_CREATE_FAILED',
+  CARD_CREATE_NO_TOKEN = 'CARD_CREATE_NO_TOKEN',
+  CARD_PAYMENT_ABANDONED = 'CARD_PAYMENT_ABANDONED',
+  CARD_PAYMENT_BANK_DECLINED = 'CARD_PAYMENT_BANK_DECLINED',
+  CARD_PAYMENT_DEBIT_ONLY = 'CARD_PAYMENT_DEBIT_ONLY',
+  CARD_PAYMENT_EXPIRED = 'CARD_PAYMENT_EXPIRED',
+  CARD_PAYMENT_FAILED = 'CARD_PAYMENT_FAILED',
+  CARD_PAYMENT_INSUFFICIENT_FUNDS = 'CARD_PAYMENT_INSUFFICIENT_FUNDS',
+  CARD_PAYMENT_NOT_SUPPORTED = 'CARD_PAYMENT_NOT_SUPPORTED',
+
+  ORDER_CVV_UPDATE_ERROR = 'ORDER_CVV_UPDATE_ERROR',
+  ORDER_FAILED_AFTER_POLL = 'ORDER_FAILED_AFTER_POLL'
+  // TODO implement later
+  // "BANK_TRANSFER_ACCOUNT_ALREADY_LINKED"
+  // "BANK_TRANSFER_ACCOUNT_INFO_NOT_FOUND"
+  // "BANK_TRANSFER_ACCOUNT_NAME_MISMATCH"
+  // "BANK_TRANSFER_ACCOUNT_EXPIRED"
+  // "BANK_TRANSFER_ACCOUNT_REJECTED"
+  // "BANK_TRANSFER_ACCOUNT_FAILED"
+  // "BANK_TRANSFER_ACCOUNT_INVALID"
+  // "BANK_TRANSFER_ACCOUNT_NOT_SUPPORTED"
+  // "BANK_TRANSFER_ACCOUNT_FAILED_INTERNAL"
+  // "BANK_TRANSFER_ACCOUNT_REJECTED_FRAUD"
+  // "BANK_TRANSFER_PAYMENT_INVALID"
+  // "BANK_TRANSFER_PAYMENT_FAILED"
+  // "BANK_TRANSFER_PAYMENT_DECLINED"
+  // "BANK_TRANSFER_PAYMENT_REJECTED"
+  // "BANK_TRANSFER_PAYMENT_EXPIRED"
+  // "BANK_TRANSFER_PAYMENT_LIMITED_EXCEEDED"
+  // "BANK_TRANSFER_PAYMENT_USER_ACCOUNT_INVALID"
+  // "BANK_TRANSFER_PAYMENT_FAILED_INTERNAL"
+  // "BANK_TRANSFER_PAYMENT_INSUFFICIENT_FUNDS"
+}
+
 export const FORM_BS_CANCEL_ORDER = 'cancelBSOrderForm'
 export const FORM_BS_CHANGE_EMAIL = 'bsChangeEmail'
 export const FORM_BS_CHECKOUT_CONFIRM = 'bsCheckoutConfirm'
@@ -56,7 +134,7 @@ export const FORM_BS_CHECKOUT = 'buySellCheckout'
 export const FORM_BS_CRYPTO_SELECTION = 'bsCryptoSelection'
 export const FORM_BS_PREVIEW_SELL = 'previewSell'
 export const FORM_BS_LINKED_CARDS = 'linkedCards'
-export const FORMS_BS_BILLING_ADDRESS = 'ccBillingAddress'
+export const FORMS_BS_BILLING_ADDRESS = 'billingAddress'
 
 export const splitPair = (
   pair: BSPairsType
@@ -131,25 +209,6 @@ export const getSellCounterAmount = (sellOrder: SwapOrderType): string => {
   return convertBaseToStandard('FIAT', sellOrder.priceFunnel.outputMoney)
 }
 
-export const getNextCardExists = (
-  existingCards: Array<BSCardType>,
-  formValues: BSAddCardFormValuesType
-) => {
-  return existingCards.find((card) => {
-    if (card.state === 'BLOCKED' || card.state === 'FRAUD_REVIEW' || card.state === 'CREATED')
-      return false
-    if (!card.card) return false
-    if (card.card.number !== formValues['card-number'].slice(-4)) return false
-    if (
-      moment(`${card.card.expireMonth}/${card.card.expireYear}`, 'MM/YYYY').toString() !==
-      moment(formValues['expiry-date'], 'MM/YY').toString()
-    )
-      return false
-
-    return true
-  })
-}
-
 export const getValidPaymentMethod = (method: BSPaymentTypes) => {
   if (method === BSPaymentTypes.USER_CARD) return BSPaymentTypes.PAYMENT_CARD
   if (method === BSPaymentTypes.BANK_ACCOUNT) return BSPaymentTypes.FUNDS
@@ -158,3 +217,5 @@ export const getValidPaymentMethod = (method: BSPaymentTypes) => {
 }
 
 export const isFiatCurrencySupported = (currency: FiatType) => currency in WalletFiatEnum
+
+export const GOOGLE_PAY_MERCHANT_ID = 'BCR2DN4TVCIZ3Q2I'

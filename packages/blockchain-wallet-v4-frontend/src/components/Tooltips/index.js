@@ -19,12 +19,6 @@ class Tooltips extends React.PureComponent {
           <FormattedMessage id='tooltip.copied' defaultMessage='Copied!' />
         </Tooltip>
         <Tooltip id='addr' multiline offset={{ bottom: 8 }} />
-        <Tooltip id='lockbox.exportkeyswarning'>
-          <FormattedMessage
-            id='modals.lockboxsetup.pairdevice.exportkeyswarning.tooltip'
-            defaultMessage='Exporting the public keys from the device allows the app to show your hardware wallets balances even when the device is not connected to your computer.'
-          />
-        </Tooltip>
         <Tooltip id='import.privatekeys'>
           <FormattedMessage
             id='modals.import.privatekeys.tooltip'
@@ -185,8 +179,8 @@ class Tooltips extends React.PureComponent {
           <TextGroup size='12px' inline>
             <Text color='white' weight={400} size='12px'>
               <FormattedMessage
-                id='scenes.profile.identityverification.swaplimit.goldcompleteairdropeligible-1'
-                defaultMessage='By completing the Gold Level requirements you are automatically eligible for our airdrop programs extended to your region.'
+                id='scenes.profile.identityverification.swaplimit.full_access_completeairdropeligible-1'
+                defaultMessage='By completing the Full Access requirements you are automatically eligible for our airdrop programs extended to your region.'
               />
             </Text>
             <Link
@@ -212,12 +206,6 @@ class Tooltips extends React.PureComponent {
           <FormattedMessage
             id='modals.verifymessage.tooltip'
             defaultMessage='Verify a message signed by the owner of a particular Bitcoin address.'
-          />
-        </Tooltip>
-        <Tooltip id='lockboxRequired'>
-          <FormattedMessage
-            id='lockboxrequired.tooltip'
-            defaultMessage='Hardware device is required'
           />
         </Tooltip>
         <Tooltip id='txlist.change.tooltip'>
@@ -267,6 +255,18 @@ class Tooltips extends React.PureComponent {
             defaultMessage='The rate is subject to change. Rewards will be paid in crypto.'
           />
         </Tooltip>
+        <Tooltip id='earntable.rewards.tooltip'>
+          <FormattedMessage
+            id='scenes.earn.earntable.rewards.tooltip'
+            defaultMessage='A Rewards Account is a crypto storage facility that earns rewards on the crypto you hold in it.'
+          />
+        </Tooltip>
+        <Tooltip id='earntable.staking.tooltip'>
+          <FormattedMessage
+            id='scenes.earn.earntable.staking.tooltip'
+            defaultMessage='Staking is the process used by Proof-of-Stake (PoS) blockchains to verify and secure transactions on their networks.'
+          />
+        </Tooltip>
         <Tooltip id='modals.interest.depositmax.tooltip'>
           <FormattedMessage
             id='modals.interest.deposit.maxtransfer.tooltip'
@@ -283,6 +283,42 @@ class Tooltips extends React.PureComponent {
           <FormattedMessage
             id='modals.interest.summary.accrued.description.tooltip'
             defaultMessage='Rewards earned month to date. Total rewards earned during any month will be transferred on the 1st of the following month.'
+          />
+        </Tooltip>
+        <Tooltip id='modals.staking.summary.fee.tooltip'>
+          <FormattedMessage
+            id='modals.staking.summary.fee.description.tooltip'
+            defaultMessage='Rates are determined by each protocol minus a Blockchain.com fee. Users receive the displayed rate.'
+          />
+        </Tooltip>
+        <Tooltip id='modals.active-rewards.summary.total-earned.tooltip'>
+          <FormattedMessage
+            id='modals.active-rewards.summary.total-earned.description.tooltip'
+            defaultMessage='Sum of all rewards and debits of previous strategies.'
+          />
+        </Tooltip>
+        <Tooltip id='modals.active-rewards.summary.annual-rate.tooltip'>
+          <FormattedMessage
+            id='modals.active-rewards.summary.annual-rate.description.tooltip'
+            defaultMessage='Rate perceived by the user if market price is at or lower than the trigger price at the expiration date.'
+          />
+        </Tooltip>
+        <Tooltip id='modals.active-rewards.summary.trigger-price.tooltip'>
+          <FormattedMessage
+            id='modals.active-rewards.summary.trigger-price.description.tooltip'
+            defaultMessage='A price level that results in a debit to your crypto balance if exceeded on the expiration date.'
+          />
+        </Tooltip>
+        <Tooltip id='modals.active-rewards.bonding.pending.tooltip'>
+          <FormattedMessage
+            id='modals.active-rewards.summary.bonding.pending.description.tooltip'
+            defaultMessage='Funds will be added to the subscribed amount once the current strategy finishes.'
+          />
+        </Tooltip>
+        <Tooltip id='modals.staking.bonding.pending.tooltip'>
+          <FormattedMessage
+            id='modals.staking.bonding.pending.description.tooltip'
+            defaultMessage='Staked funds are subject to a bonding period of time before they start generating staking rewards.'
           />
         </Tooltip>
         <Tooltip id='modals.interest.summary.lock.tooltip'>
@@ -309,7 +345,49 @@ class Tooltips extends React.PureComponent {
         <Tooltip id='tooltip.opensea_offer_approval_fees' maxWidth='160px'>
           <FormattedMessage
             id='copy.opensea_offer_approval_fees'
+            defaultMessage='A one time fee required to make offers on this collection.'
+          />
+        </Tooltip>
+        <Tooltip id='tooltip.opensea_offer_conduit_approval_fees' maxWidth='160px'>
+          <FormattedMessage
+            id='copy.opensea_offer_conduit_approval_fees'
             defaultMessage='A one time fee required to make offers in the selected ERC20.'
+          />
+        </Tooltip>
+        <Tooltip id='tooltip.opensea_listing_approval_fees' maxWidth='160px'>
+          <FormattedMessage
+            id='copy.opensea_listing_approval_fees'
+            defaultMessage='A listing fee is required. You only need to approve each collection once.'
+          />
+        </Tooltip>
+        <Tooltip id='tooltip.nft_asset_not_for_sale' maxWidth='160px'>
+          <FormattedMessage
+            id='copy.nft_asset_not_for_sale'
+            defaultMessage='You can still make an offer using an ERC20 like WETH.'
+          />
+        </Tooltip>
+        <Tooltip id='tooltip.dex.minimum_amount'>
+          <FormattedMessage
+            id='scenes.dex.quote_details.minimum_amount.tooltip'
+            defaultMessage='The minimum amount you are guaranteed to receive. If the price changes more than your set slippage, your transaction will revert.'
+          />
+        </Tooltip>
+        <Tooltip id='tooltip.dex.slippage'>
+          <FormattedMessage
+            id='scenes.dex.quote_details.network_fee.tooltip'
+            defaultMessage='Slippage is the max percentage of price you’re willing to allow for your swap to go through. If price changes beyond that, the swap will revert and your assets will be returned.'
+          />
+        </Tooltip>
+        <Tooltip id='tooltip.dex.network_fee'>
+          <FormattedMessage
+            id='scenes.dex.quote_details.network_fee.tooltip'
+            defaultMessage='A fee paid to process your transaction. This must be paid in the network’s native token.'
+          />
+        </Tooltip>
+        <Tooltip id='tooltip.dex.blockchain_fee'>
+          <FormattedMessage
+            id='scenes.dex.quote_details.blockchain_fee.tooltip'
+            defaultMessage='This is a small fee for using the Blockchain.com DEX service.'
           />
         </Tooltip>
       </TooltipWrapper>

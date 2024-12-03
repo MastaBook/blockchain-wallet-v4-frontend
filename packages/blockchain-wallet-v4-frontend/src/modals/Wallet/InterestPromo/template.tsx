@@ -1,6 +1,5 @@
 import React from 'react'
 import { FormattedMessage } from 'react-intl'
-import { calcBasicInterest } from 'blockchain-wallet-v4-frontend/src/modals/Interest/conversions'
 import styled from 'styled-components'
 
 import { fiatToString } from '@core/exchange/utils'
@@ -9,6 +8,7 @@ import { Button, Link, Modal, ModalBody, ModalHeader, Text } from 'blockchain-in
 import { BlueCartridge } from 'components/Cartridge'
 
 import { Props as OwnProps, SuccessStateType } from './index'
+import { calcBasicInterest } from './InterestPromo.utils'
 
 const ModalHeaderBorderless = styled(ModalHeader)`
   border-bottom: none;
@@ -37,15 +37,19 @@ const Success: React.FC<Props> = ({
   afterTransaction,
   closeAll,
   interestActions,
-  interestRate,
+  interestRates,
   position,
+  productAuthMetadata,
   total,
+  userData,
   walletCurrency
 }) => {
   const { currency, fiatAmount, fiatCurrency } = afterTransaction
   const purchaseAmount = fiatAmount || 0
-  const interestAmount = calcBasicInterest(purchaseAmount, interestRate[currency || 'BTC'])
+  const interestAmount = calcBasicInterest(purchaseAmount, interestRates[currency || 'BTC'])
   const worthCurrency = fiatCurrency || (walletCurrency as WalletFiatType)
+  const isUserFromUK = userData?.address?.country === 'GB'
+  const isIpFromUk = productAuthMetadata?.ipCountry === 'GB'
   return (
     <Modal size='medium' position={position} total={total}>
       <ModalHeaderBorderless onClose={closeAll}>
@@ -62,11 +66,26 @@ const Success: React.FC<Props> = ({
             id='modals.interestpromo.title'
             defaultMessage='Earn {interestRate}% Rewards on your {coin}'
             values={{
-              coin: 'BTC',
-              interestRate: interestRate[currency]
+              coin: currency,
+              interestRate: interestRates[currency]
             }}
           />
         </Text>
+        {isUserFromUK && (
+          <Text color='grey600' weight={500} size='14px' italic>
+            APYs are always indicative based on past performance and are not guaranteed. Find out
+            more about Staking and Rewards as well as the risks{' '}
+            <Link
+              size='12px'
+              href='https://support.blockchain.com/hc/en-us/articles/10857163796380-Staking-and-Rewards-what-are-the-risks'
+              target='_blank'
+              style={{ textDecoration: 'underline' }}
+            >
+              here
+            </Link>
+            .
+          </Text>
+        )}
         <Text
           size='14px'
           color='grey600'

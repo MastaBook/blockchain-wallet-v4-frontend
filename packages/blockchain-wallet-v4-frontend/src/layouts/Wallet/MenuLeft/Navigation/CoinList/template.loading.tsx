@@ -1,7 +1,7 @@
 import React from 'react'
 import styled from 'styled-components'
 
-import { SkeletonCircle } from 'blockchain-info-components'
+import { SkeletonCircle, SkeletonRectangle } from 'blockchain-info-components'
 
 const Wrapper = styled.div`
   display: flex;
@@ -11,7 +11,6 @@ const Wrapper = styled.div`
   margin-bottom: 8px;
   height: 48px;
   box-sizing: border-box;
-  background-color: ${(props) => props.theme.grey000};
   border-radius: 8px;
 `
 
@@ -19,18 +18,21 @@ const Circle = styled(SkeletonCircle)`
   margin-right: 10px;
 `
 
-const Loading: React.FC<Props> = () => {
+const LoadingTextDark = styled(SkeletonRectangle)`
+  border-radius: 10px;
+`
+
+const Loading = () => {
   return (
     <>
       {[1, 2, 3].map((i) => (
         <Wrapper key={i}>
           <Circle height='24px' width='24px' bgColor='grey200' />
+          <LoadingTextDark width='75px' height='16px' />
         </Wrapper>
       ))}
     </>
   )
 }
-
-type Props = {}
 
 export default Loading

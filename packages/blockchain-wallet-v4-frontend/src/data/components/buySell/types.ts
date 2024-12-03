@@ -1,4 +1,5 @@
 import type {
+  ApplePayInfoType,
   BSAccountType,
   BSBalancesType,
   BSCardType,
@@ -7,25 +8,32 @@ import type {
   BSPairType,
   BSPaymentMethodsType,
   BSPaymentMethodType,
+  BSPaymentTypes,
   BSQuoteType,
+  BuyQuoteType,
   CoinType,
   CrossBorderLimits,
-  Everypay3DSResponseType,
   FiatEligibleType,
   FiatType,
+  GooglePayInfoType,
+  MobilePaymentType,
   NabuAddressType,
   PaymentValue,
   ProviderDetailsType,
+  RefreshConfig,
   RemoteDataType,
-  SDDEligibleType,
-  SDDVerifiedType,
+  SwapNewQuoteType,
   SwapOrderType,
-  SwapQuoteType,
-  SwapUserLimitsType
+  SwapUserLimitsType,
+  TradeAccumulatedItem
 } from '@core/types'
+import { PartialClientErrorProperties } from 'data/analytics/types/errors'
 import type { CountryType } from 'data/components/identityVerification/types'
 import type { RecurringBuyPeriods } from 'data/components/recurringBuy/types'
 import type { SwapAccountType, SwapBaseCounterTypes } from 'data/components/swap/types'
+import { NabuError } from 'services/errors'
+
+import { BankDWStepType, PlaidSettlementErrorReasons } from '../brokerage/types'
 
 // Types
 export type BSAddCardFormValuesType = {
@@ -36,12 +44,7 @@ export type BSAddCardFormValuesType = {
   'name-on-card': string
   sameAsBillingAddress?: boolean
 }
-export type BSAddCardErrorType =
-  | 'PENDING_CARD_AFTER_POLL'
-  | 'LINK_CARD_FAILED'
-  | 'CARD_ACTIVATION_FAILED'
-  | 'CARD_CREATION_FAILED'
-  | 'CARD_ALREADY_SAVED'
+
 export type BSBillingAddressFormValuesType = NabuAddressType
 export type BSBillingAddressFormSDDType = {
   country: CountryType
@@ -68,47 +71,63 @@ export enum BuySellStepType {
   '3DS_HANDLER_EVERYPAY',
   '3DS_HANDLER_STRIPE',
   '3DS_HANDLER_CHECKOUTDOTCOM',
-  'ADD_CARD_DETERMINE_PROVIDER',
+  '3DS_HANDLER_FAKE_CARD_ACQUIRER',
+  'DETERMINE_CARD_PROVIDER',
   'ADD_CARD_CHECKOUTDOTCOM',
-  'ADD_CARD_EVERYPAY',
+  'ADD_CARD_VGS',
   'AUTHORIZE_PAYMENT',
   'BANK_WIRE_DETAILS',
-  'CC_BILLING_ADDRESS',
+  'BILLING_ADDRESS',
   'CHECKOUT_CONFIRM',
   'CRYPTO_SELECTION',
   'ENTER_AMOUNT',
+  'INITIAL_LOADING',
   'KYC_REQUIRED',
   'LINKED_PAYMENT_ACCOUNTS',
   'LOADING',
   'OPEN_BANKING_CONNECT',
   'PAYMENT_METHODS',
   'PREVIEW_SELL',
-  'TRADING_CURRENCY_SELECTOR',
   'ORDER_SUMMARY',
+  'PAYMENT_ACCOUNT_ERROR',
   'SELL_ORDER_SUMMARY',
   'TRANSFER_DETAILS',
   'UPGRADE_TO_GOLD',
   'FREQUENCY',
-  'VERIFY_EMAIL'
+  'VERIFY_EMAIL',
+  'UPDATE_SECURITY_CODE',
+  'SELL_ENTER_AMOUNT',
+  'CONFIRMING_BUY_ORDER'
 }
 export type BSShowModalOriginType =
+  | 'CoinPageHoldings'
+  | 'CompleteProfileBanner'
+  | 'CompleteProfile'
+  | 'CowboysSignupModal'
+  | 'EarnPage'
+  | 'DebitCardDashboard'
   | 'EmptyFeed'
   | 'PendingOrder'
   | 'PriceChart'
   | 'Prices'
-  | 'InterestPage'
+  | 'Nfts'
+  | 'NftsMakeOffer'
   | 'RecurringBuyPromo'
+  | 'AppleAndGooglePayPromo'
   | 'SellEmpty'
+  | 'Send'
   | 'SettingsGeneral'
   | 'SettingsProfile'
   | 'SideNav'
   | 'BuySellLink'
+  | 'Trade'
   | 'TransactionList'
   | 'WelcomeModal'
   | 'WithdrawModal'
   | 'SwapNoHoldings'
   | 'CurrencyList'
   | 'Goals'
+  | 'VerifyAddress'
 
 export enum BSCardStateEnum {
   ACTIVE = 'ACTIVE',
@@ -118,47 +137,91 @@ export enum BSCardStateEnum {
   PENDING = 'PENDING'
 }
 
+export type BSCardSuccessRateType = {
+  details?: {
+    actions: {
+      title: string
+      url: string
+    }[]
+    message: string
+    title: string
+  }
+  isBlocked: boolean
+}
+
+export type BuyQuoteStateType = {
+  amount: string
+  fee: string
+  /**
+   * @deprecated Use `pairObject` instead.
+   */
+  pair: string
+  pairObject: BSPairType
+  paymentMethod: BSPaymentTypes
+  paymentMethodId?: BSCardType['id']
+  quote: BuyQuoteType
+  /**
+   * @deprecated
+   */
+  rate: number
+  refreshConfig: RefreshConfig
+}
+
+export type SellQuoteStateType = {
+  quote: SwapNewQuoteType
+  rate: number
+  refreshConfig: RefreshConfig
+}
+
 // State
 export type BuySellState = {
-  account: RemoteDataType<string, BSAccountType>
-  addBank: boolean | undefined
-  balances: RemoteDataType<string, BSBalancesType>
-  card: RemoteDataType<string, BSCardType>
-  cardId: undefined | string
-  cards: RemoteDataType<string, Array<BSCardType>>
-  checkoutDotComAccountCodes: undefined | Array<string>
-  checkoutDotComApiKey: undefined | string
-  crossBorderLimits: RemoteDataType<string, CrossBorderLimits>
-  cryptoCurrency: undefined | CoinType
+  account: RemoteDataType<string | Error, BSAccountType>
+  accumulatedTrades: RemoteDataType<string, Array<TradeAccumulatedItem>>
+  addBank?: boolean
+  applePayInfo?: ApplePayInfoType
+  balances: RemoteDataType<PartialClientErrorProperties, BSBalancesType>
+  buyQuote: RemoteDataType<string | Error, BuyQuoteStateType>
+  card: RemoteDataType<string | number | Error, BSCardType>
+  cardId?: string
+  cardSuccessRate?: BSCardSuccessRateType
+  cardTokenId?: string
+  cards: RemoteDataType<PartialClientErrorProperties, Array<BSCardType>>
+  checkoutDotComAccountCodes?: Array<string>
+  checkoutDotComApiKey?: string
+  crossBorderLimits: RemoteDataType<unknown, CrossBorderLimits>
+  cryptoCurrency?: CoinType
+  cvvStatus: RemoteDataType<string | NabuError, boolean>
   displayBack: boolean
-  everypay3DS: RemoteDataType<string, Everypay3DSResponseType>
-  fiatCurrency: undefined | FiatType
-  fiatEligible: RemoteDataType<string, FiatEligibleType>
+  fiatCurrency?: FiatType
+  fiatEligible: RemoteDataType<PartialClientErrorProperties | Error, FiatEligibleType>
+  googlePayInfo?: GooglePayInfoType
   limits: RemoteDataType<string, undefined | SwapUserLimitsType>
-  method: undefined | BSPaymentMethodType
+  method?: BSPaymentMethodType
   methods: RemoteDataType<string, BSPaymentMethodsType>
-  order: undefined | BSOrderType
+  mobilePaymentMethod?: MobilePaymentType
+  order: RemoteDataType<string | number | Error, BSOrderType>
   orderType?: BSOrderActionType
-  orders: RemoteDataType<string, Array<BSOrderType>>
+  orders: RemoteDataType<PartialClientErrorProperties, Array<BSOrderType>>
   origin?: BSShowModalOriginType
-  originalFiatCurrency: undefined | FiatType
-  pair: undefined | BSPairType
-  pairs: RemoteDataType<string, Array<BSPairType>>
+  originalFiatCurrency?: FiatType
+  pair?: BSPairType
+  pairs: RemoteDataType<PartialClientErrorProperties, Array<BSPairType>>
   payment: RemoteDataType<string, undefined | PaymentValue>
-  providerDetails: RemoteDataType<string, ProviderDetailsType>
+  pendingOrder?: BSOrderType
+  providerDetails: RemoteDataType<string | Error, ProviderDetailsType>
   quote: RemoteDataType<string, BSQuoteType>
-  sddEligible: RemoteDataType<string, SDDEligibleType>
-  sddTransactionFinished: boolean
-  sddVerified: RemoteDataType<string, SDDVerifiedType>
-  sellOrder: undefined | SwapOrderType
-  sellQuote: RemoteDataType<string, { quote: SwapQuoteType; rate: number }>
+  reason?: PlaidSettlementErrorReasons
+  sellOrder?: SwapOrderType
+  sellQuote: RemoteDataType<string, SellQuoteStateType>
+  sellQuotePrice: RemoteDataType<string | Error, SellQuotePrice>
   step: keyof typeof BuySellStepType
-  swapAccount: undefined | SwapAccountType
+  swapAccount?: SwapAccountType
+  vgsVaultId?: string
 }
 
 export type InitializeCheckout = {
   account?: SwapAccountType
-  amount: string
+  amount?: string
   cryptoAmount?: string
   fix: BSFixType
   orderType: BSOrderActionType
@@ -169,10 +232,6 @@ export type InitializeCheckout = {
 
 export type StepActionsPayload =
   | {
-      order: BSOrderType
-      step: 'CHECKOUT_CONFIRM' | 'ORDER_SUMMARY' | 'OPEN_BANKING_CONNECT' | 'AUTHORIZE_PAYMENT'
-    }
-  | {
       sellOrder: SwapOrderType
       step: 'SELL_ORDER_SUMMARY'
     }
@@ -180,10 +239,11 @@ export type StepActionsPayload =
       cryptoCurrency: CoinType
       fiatCurrency: FiatType
       method?: BSPaymentMethodType
+      mobilePaymentMethod?: MobilePaymentType
       order?: BSOrderType
       orderType?: BSOrderActionType
       pair: BSPairType
-      step: 'ENTER_AMOUNT' | 'VERIFY_EMAIL'
+      step: 'ENTER_AMOUNT' | 'SELL_ENTER_AMOUNT' | 'VERIFY_EMAIL'
       swapAccount?: SwapAccountType
     }
   | {
@@ -202,7 +262,6 @@ export type StepActionsPayload =
   | {
       cryptoCurrency: CoinType
       fiatCurrency: FiatType
-      order?: BSOrderType
       pair: BSPairType
       step: 'PAYMENT_METHODS'
     }
@@ -215,7 +274,11 @@ export type StepActionsPayload =
     }
   | {
       order?: BSOrderType
-      step: '3DS_HANDLER_EVERYPAY' | '3DS_HANDLER_STRIPE' | '3DS_HANDLER_CHECKOUTDOTCOM'
+      step:
+        | '3DS_HANDLER_EVERYPAY'
+        | '3DS_HANDLER_STRIPE'
+        | '3DS_HANDLER_CHECKOUTDOTCOM'
+        | '3DS_HANDLER_FAKE_CARD_ACQUIRER'
     }
   | {
       sellOrderType?: SwapBaseCounterTypes
@@ -227,13 +290,45 @@ export type StepActionsPayload =
       step: 'ADD_CARD_CHECKOUTDOTCOM'
     }
   | {
+      cardTokenId: string
+      step: 'ADD_CARD_VGS'
+      vgsVaultId: string
+    }
+  | {
+      reason: PlaidSettlementErrorReasons
+      step: BankDWStepType.PAYMENT_ACCOUNT_ERROR
+    }
+  | {
       step:
-        | 'ADD_CARD_DETERMINE_PROVIDER'
-        | 'ADD_CARD_EVERYPAY'
-        | 'CC_BILLING_ADDRESS'
+        | 'CHECKOUT_CONFIRM'
+        | 'ORDER_SUMMARY'
+        | 'OPEN_BANKING_CONNECT'
+        | 'AUTHORIZE_PAYMENT'
+        | 'DETERMINE_CARD_PROVIDER'
+        | 'BILLING_ADDRESS'
         | 'KYC_REQUIRED'
         | 'UPGRADE_TO_GOLD'
+        | 'INITIAL_LOADING'
         | 'LOADING'
-        | 'TRADING_CURRENCY_SELECTOR'
         | 'FREQUENCY'
+        | 'UPDATE_SECURITY_CODE'
+        | 'CONFIRMING_BUY_ORDER'
     }
+
+export type PollOrder = {
+  orderId: string
+  waitUntilSettled?: boolean // this will help us to keep track did user already been on 3DS page
+}
+
+export type SellQuotePrice = {
+  data: {
+    amount: StandardNumericString
+    networkFee: StandardNumericString
+    price: StandardNumericString
+    resultAmount: StandardNumericString
+  }
+  isFailed: boolean
+  isPlaceholder: boolean
+  isRefreshing: boolean
+  rate: number
+}

@@ -5,13 +5,14 @@ import styled from 'styled-components'
 import { Button, Icon, Text } from 'blockchain-info-components'
 import { FlyoutWrapper } from 'components/Flyout'
 
+import { IconsContainer, Title } from '../../components'
 import {
   NumberContainer,
   NumberDescription,
   NumberWrapper,
   RowNumber,
   SubTitle
-} from '../template.rejected.styles'
+} from '../../components/Rejected'
 import { Props } from '.'
 
 const Wrapper = styled.div`
@@ -20,12 +21,7 @@ const Wrapper = styled.div`
   display: flex;
   flex-direction: column;
 `
-const Title = styled(Text)`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 7px;
-`
+
 const ShortTitleContainer = styled.div`
   max-width: 154px;
   margin-top: 20px;
@@ -38,12 +34,6 @@ const DisplayTitle = styled(Text)`
   font-size: 15px;
   display: flex;
   color: ${(props) => props.theme.textBlack};
-  width: 100%;
-`
-const IconsContainer = styled.div`
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
   width: 100%;
 `
 
@@ -63,7 +53,7 @@ const Template: React.FC<Props> = (props) => {
             onClick={props.handleClose}
           />
         </IconsContainer>
-        <Title color='grey800' size='24px' weight={600}>
+        <Title color='grey800'>
           <ShortTitleContainer>
             <FormattedMessage id='modals.simplebuy.kycrequired.title' defaultMessage='Buy Crypto' />
           </ShortTitleContainer>
@@ -146,12 +136,8 @@ const Template: React.FC<Props> = (props) => {
               origin: 'BuySell',
               tier: 2
             })
-            if (props.order) {
-              props.buySellActions.setStep({
-                order: props.order,
-                step: 'CHECKOUT_CONFIRM'
-              })
-            }
+
+            props.buySellActions.destroyCheckout()
           }}
           style={{ marginTop: '16px' }}
           type='button'

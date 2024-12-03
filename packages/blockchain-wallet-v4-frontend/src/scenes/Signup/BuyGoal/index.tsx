@@ -1,15 +1,17 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { FormattedMessage } from 'react-intl'
-import { LinkContainer } from 'react-router-bootstrap'
-import { find, isEmpty, isNil, propEq, propOr } from 'ramda'
-import { InjectedFormProps } from 'redux-form'
+import { useDispatch, useSelector } from 'react-redux'
+import { change, InjectedFormProps } from 'redux-form'
 import styled from 'styled-components'
 
 import Currencies from '@core/exchange/currencies'
-import { Icon, Link, Text } from 'blockchain-info-components'
+import { getIsCoinDataLoaded } from '@core/redux/data/coins/selectors'
+import { Icon, Text } from 'blockchain-info-components'
 import { BuySellWidgetGoalDataType } from 'data/types'
 
-import { Card, CardHeader, CardsWrapper, SignInText, SubCard } from '../components'
+import { SIGNUP_FORM } from '..'
+import { Card, CardHeader, CardsWrapper, PaddingWrapper } from '../components'
+import { LoginLink } from '../components/LoginLink'
 import SignupForm from '../components/SignupForm'
 import { SubviewProps } from '../types'
 
@@ -54,17 +56,24 @@ const Amount = styled(Text)`
   text-overflow: ellipsis;
 `
 
-const BuyGoal = (props: InjectedFormProps<{}, SubviewProps> & SubviewProps) => {
+const BuyGoal = (props: InjectedFormProps<{}> & SubviewProps) => {
+  const isCoinDataLoaded = useSelector(getIsCoinDataLoaded)
+  const dispatch = useDispatch()
+
   const { goals } = props
-  const dataGoal = find(propEq('name', 'buySell'), goals)
-  const goalData: BuySellWidgetGoalDataType = propOr({}, 'data', dataGoal)
-  const { amount, crypto, fiatCurrency } = goalData
-  const showBuyHeader =
-    !isNil(goalData) && !isEmpty(goalData) && !!fiatCurrency && !!crypto && !!amount
+  const dataGoal = goals.find((goal) => goal.name === 'buySell')
+  const goalData = dataGoal?.data ?? ({} as BuySellWidgetGoalDataType)
+  const { amount, crypto, email, fiatCurrency } = goalData
+  const showBuyHeader = Object.keys(goalData).length > 0 && !!fiatCurrency && !!crypto && !!amount
+
+  useEffect(() => {
+    dispatch(change(SIGNUP_FORM, 'email', email))
+  }, [])
+
   return (
-    <>
-      <CardsWrapper>
-        <BuyCard>
+    <CardsWrapper>
+      <BuyCard>
+        <PaddingWrapper>
           <CardHeader>
             <Text size='24px' color='textBlack' weight={600}>
               <FormattedMessage
@@ -73,8 +82,7 @@ const BuyGoal = (props: InjectedFormProps<{}, SubviewProps> & SubviewProps) => {
               />
             </Text>
           </CardHeader>
-
-          {showBuyHeader && (
+          {showBuyHeader && isCoinDataLoaded && (
             <>
               <BuyItemWrapper>
                 <AmountWrapper>
@@ -87,7 +95,6 @@ const BuyGoal = (props: InjectedFormProps<{}, SubviewProps> & SubviewProps) => {
                     </Amount>
                   </SimpleWrapper>
                 </AmountWrapper>
-
                 <CryptoWrapper>
                   <Icon color={crypto} name={crypto} size='24px' weight={400} />
                   <Text capitalize color='black' size='16px' weight={500}>
@@ -107,27 +114,11 @@ const BuyGoal = (props: InjectedFormProps<{}, SubviewProps> & SubviewProps) => {
               </Text>
             </>
           )}
-
           <SignupForm {...props} />
-        </BuyCard>
-      </CardsWrapper>
-      <LinkContainer to='/login'>
-        <Link>
-          <SubCard>
-            <Text size='14px' color='whiteFade600' weight={500}>
-              <FormattedMessage
-                id='scenes.register.wallet.link'
-                defaultMessage='Already have a wallet?'
-              />
-            </Text>
-            &nbsp;
-            <SignInText color='whiteFade900' size='14px' weight={500}>
-              <FormattedMessage id='scenes.register.wallet.signin' defaultMessage='Sign In' />
-            </SignInText>
-          </SubCard>
-        </Link>
-      </LinkContainer>
-    </>
+        </PaddingWrapper>
+        <LoginLink />
+      </BuyCard>
+    </CardsWrapper>
   )
 }
 

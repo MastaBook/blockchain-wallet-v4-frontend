@@ -7,9 +7,10 @@ import { Field, reduxForm } from 'redux-form'
 import styled from 'styled-components'
 
 import { Icon, TabMenu, TabMenuItem, Text } from 'blockchain-info-components'
-import { TextBox } from 'components/Form'
+import TextBox from 'components/Form/TextBox'
 import HorizontalMenu from 'components/HorizontalMenu'
 import { StickyHeader } from 'components/Layout'
+import MenuHeader from 'components/MenuHeader'
 import { model } from 'data'
 import { media } from 'services/styles'
 
@@ -36,11 +37,7 @@ const SearchIcon = styled(Icon)`
   top: 10px;
   right: 10px;
 `
-const MenuHeader = styled.div`
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 1.5rem;
-`
+
 const Title = styled(Text)`
   margin: 4px 0;
 `

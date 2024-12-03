@@ -2,79 +2,31 @@ import React from 'react'
 import { FormattedMessage } from 'react-intl'
 import { connect, ConnectedProps } from 'react-redux'
 import { bindActionCreators } from 'redux'
-import styled from 'styled-components'
 
+import { utils } from '@core'
 import { Button, Icon, SkeletonRectangle, Text } from 'blockchain-info-components'
 import CopyClipboardButton from 'components/Clipboard/CopyClipboardButton'
 import { FlyoutWrapper } from 'components/Flyout'
 import { StepHeader } from 'components/Flyout/SendRequestCrypto'
-import { CoinAccountListOption } from 'components/Form'
+import CoinAccountListOption from 'components/Form/CoinAccountListOption'
+import { NetworkWarning, NetworkWarningVariant } from 'components/NetworkWarning'
 import QRCodeWrapper from 'components/QRCode/Wrapper'
 import { actions, selectors } from 'data'
 import { SwapBaseCounterTypes } from 'data/types'
-
+import {
+  AddressDisplay,
+  AddressWrapper,
+  AlertWrapper,
+  ButtonsWrapper,
+  InfoContainer,
+  QRCodeContainer,
+  Wrapper
+} from './styled'
 import { Props as OwnProps } from '../index'
 import { ClipboardWrapper } from '../model'
 import { RequestSteps } from '../types'
 
-const Wrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-`
-const AddressWrapper = styled.div`
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 40px;
-  border-bottom: ${(props) => `1px solid ${props.theme.grey000}`};
-  &:first-child {
-    border-top: ${(props) => `1px solid ${props.theme.grey000}`};
-  }
-`
-const AddressDisplay = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: space-between;
-  overflow-wrap: anywhere;
-  word-break: break-all;
-  hyphens: none;
-`
-const InfoContainer = styled.div`
-  background: ${(props) => props.theme.grey000};
-  margin: 16px 40px 0px 40px;
-  padding: 16px;
-  border-radius: 8px;
-`
-const QRCodeContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  margin: 40px 0 36px;
-  width: 100%;
-`
-const ButtonsWrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  padding: 0 40px;
-
-  & > :last-child {
-    margin-top: 16px;
-  }
-`
-const AlertWrapper = styled.div`
-  flex-direction: column;
-  display: flex;
-  height: 100%;
-  width: 100%;
-  justify-content: center;
-  align-items: center;
-`
+const { formatAddr, hasPrefix } = utils.bch
 
 class RequestShowAddress extends React.PureComponent<Props> {
   componentDidMount() {
@@ -128,7 +80,8 @@ class RequestShowAddress extends React.PureComponent<Props> {
                 ),
                 Loading: () => <SkeletonRectangle width='280px' height='24px' />,
                 NotAsked: () => <SkeletonRectangle width='280px' height='24px' />,
-                Success: (val) => val.address
+                Success: (val) =>
+                  hasPrefix(val.address) ? formatAddr(val.address, true) : val.address
               })}
             </Text>
           </AddressDisplay>
@@ -139,10 +92,11 @@ class RequestShowAddress extends React.PureComponent<Props> {
               NotAsked: () => <></>,
               Success: (val) => (
                 <CopyClipboardButton
-                  onClick={() => this.props.requestActions.setAddressCopied()}
-                  textToCopy={val.address}
                   color='blue600'
+                  onClick={() => this.props.requestActions.setAddressCopied()}
                   size='24px'
+                  textToCopy={hasPrefix(val.address) ? formatAddr(val.address, true) : val.address}
+                  coin={selectedAccount.coin}
                 />
               )
             })}
@@ -176,17 +130,19 @@ class RequestShowAddress extends React.PureComponent<Props> {
                 ))
               : null
         })}
-        {coinfig.type.isMemoBased && selectedAccount.type === SwapBaseCounterTypes.CUSTODIAL && (
-          <InfoContainer>
-            <Text color='grey600' size='12px' weight={500}>
-              <FormattedMessage
-                id='modals.requestcrypto.showaddress.memo_required'
-                defaultMessage='If you send funds without the {coin} Memo Text, your funds will be lost and not credited to your account. Please send only {coin} to this address.'
-                values={{ coin: selectedAccount.coin }}
-              />
-            </Text>
-          </InfoContainer>
-        )}
+        {coinfig.type.isMemoBased &&
+          selectedAccount.type === SwapBaseCounterTypes.CUSTODIAL &&
+          this.props.addressR.getOrElse({ address: '', extras: { Memo: '' } }).extras.Memo && (
+            <InfoContainer>
+              <Text color='grey600' size='12px' weight={500}>
+                <FormattedMessage
+                  id='modals.requestcrypto.showaddress.memo_required'
+                  defaultMessage='If you send funds without the {coin} Memo Text, your funds will be lost and not credited to your account. Please send only {coin} to this address.'
+                  values={{ coin: selectedAccount.coin }}
+                />
+              </Text>
+            </InfoContainer>
+          )}
         <QRCodeContainer>
           {this.props.addressR.cata({
             Failure: (err) => (
@@ -207,6 +163,18 @@ class RequestShowAddress extends React.PureComponent<Props> {
           })}
         </QRCodeContainer>
         <ButtonsWrapper>
+          {selectedAccount.coin === 'TRX' ? (
+            <Text color='grey600' size='14px' weight={500}>
+              <FormattedMessage
+                id='modals.requestcrypto.trx.warning'
+                defaultMessage='Use this address only to receive or deposit TRX. Lost funds cannot be recovered.'
+                values={{ coin: selectedAccount.coin }}
+              />
+            </Text>
+          ) : (
+            <NetworkWarning coin={selectedAccount.coin} variant={NetworkWarningVariant.RECEIVE} />
+          )}
+
           <Button
             data-e2e='copyRequestLink'
             fullwidth

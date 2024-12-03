@@ -1,78 +1,86 @@
 import React, { useEffect } from 'react'
-import { FormattedMessage } from 'react-intl'
 import BigNumber from 'bignumber.js'
+import { getIsSharedStorefront } from 'blockchain-wallet-v4-frontend/src/scenes/Nfts/utils/NftUtils'
 
-import { GasCalculationOperations } from '@core/network/api/nfts/types'
-import { SpinningLoader, TooltipHost, TooltipIcon } from 'blockchain-info-components'
-import CoinDisplay from 'components/Display/CoinDisplay'
-import FiatDisplay from 'components/Display/FiatDisplay'
-import { Title, Value } from 'components/Flyout/model'
+import { displayCoinToCoin } from '@core/exchange'
+import { GasCalculationOperations, NftAsset } from '@core/network/api/nfts/types'
+import { SpinningLoader } from 'blockchain-info-components'
+import { useRemote } from 'hooks'
 
-import { CTARow } from '../../components'
+import NftDropdown from '../../components/NftDropdown'
 import { Props as OwnProps } from '..'
+import { NftMakeOfferFormValues } from '.'
+import CollectionFees from './Collection.fees'
+import ConduitFees from './Conduit.fees'
+import WrapEthFees from './WrapEth.fees'
 
 const Fees: React.FC<Props> = (props) => {
-  const { nftActions, orderFlow } = props
-  const { activeOrder } = orderFlow
-
-  // User can only make an offer in WETH
-  const WETH = window.coins.WETH.coinfig.type.erc20Address
+  const { asset, isAuthenticated, isInvited, needsWrap, nftActions, orderFlow } = props
+  const fees = useRemote(() => orderFlow.fees)
+  const IS_SHARED_STOREFRONT = getIsSharedStorefront(asset)
 
   useEffect(() => {
-    if (activeOrder) {
-      nftActions.fetchFees({
-        offer: '10000',
-        operation: GasCalculationOperations.Buy,
-        order: activeOrder,
+    if (IS_SHARED_STOREFRONT) {
+      // Default to WETH
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const WETH = window.coins.WETH.coinfig.type.erc20Address!
+
+      nftActions.fetchFees_LEGACY({
+        asset,
+        offer: '0.000001',
+        operation: GasCalculationOperations.CreateOffer,
         paymentTokenAddress: WETH
+      })
+    } else {
+      nftActions.fetchFees({
+        amount: '0',
+        asset,
+        // TODO: SEAPORT
+        coin: 'WETH',
+        operation: GasCalculationOperations.CreateOffer
       })
     }
   }, [])
 
-  if (!activeOrder) return null
+  const getTotalFees = () => {
+    if (fees.isLoading) return <SpinningLoader height='12px' width='12px' borderWidth='3px' />
+    if (!fees.data) return '⚠️'
+
+    let totalFees = new BigNumber(fees.data?.totalFees).multipliedBy(fees.data?.gasPrice)
+    if (needsWrap) {
+      totalFees = totalFees.plus(
+        new BigNumber(orderFlow?.wrapEthFees?.data?.totalFees).multipliedBy(
+          orderFlow?.wrapEthFees?.data?.gasPrice
+        )
+      )
+    }
+    if (totalFees.isNaN()) return '⚠️'
+    const totalString = totalFees.toString()
+    const total = displayCoinToCoin({ coin: 'ETH', value: totalString })
+    return total
+  }
+
+  if (!isAuthenticated) return null
+  if (!isInvited) return null
 
   return (
     <>
-      {orderFlow.fees.cata({
-        Failure: () => null,
-        Loading: () => (
-          <CTARow>
-            <SpinningLoader width='14px' height='14px' borderWidth='3px' />
-          </CTARow>
-        ),
-        NotAsked: () => null,
-        Success: (val) => {
-          return (
-            <>
-              <CTARow>
-                <Title style={{ display: 'flex' }}>
-                  <FormattedMessage id='copy.fees' defaultMessage='Fees' />
-                  {val.approvalFees > 0 ? (
-                    <TooltipHost id='tooltip.opensea_offer_approval_fees'>
-                      <TooltipIcon name='question-in-circle-filled' />
-                    </TooltipHost>
-                  ) : null}
-                </Title>
-                <Value>
-                  <div style={{ display: 'flex' }}>
-                    <CoinDisplay size='14px' color='black' weight={600} coin='ETH'>
-                      {new BigNumber(val.approvalFees).multipliedBy(val.gasPrice).toString()}
-                    </CoinDisplay>
-                    &nbsp;-&nbsp;
-                    <FiatDisplay size='12px' color='grey600' weight={600} coin='ETH'>
-                      {new BigNumber(val.approvalFees).multipliedBy(val.gasPrice).toString()}
-                    </FiatDisplay>
-                  </div>
-                </Value>
-              </CTARow>
-            </>
-          )
-        }
-      })}
+      {/* TODO: SEAPORT */}
+      {props.formValues?.coin === 'WETH' ? (
+        <NftDropdown title='Total Fees' hasPadding titleRight={getTotalFees()}>
+          <CollectionFees {...props} />
+          {IS_SHARED_STOREFRONT ? null : <ConduitFees {...props} />}
+          <WrapEthFees {...props} />
+        </NftDropdown>
+      ) : null}
     </>
   )
 }
 
-type Props = OwnProps
+type Props = OwnProps & {
+  asset: NftAsset
+  formValues: NftMakeOfferFormValues
+  needsWrap: boolean
+}
 
 export default Fees

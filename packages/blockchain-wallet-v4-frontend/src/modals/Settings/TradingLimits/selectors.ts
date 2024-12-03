@@ -1,6 +1,6 @@
 import { lift } from 'ramda'
 
-import { ExtractSuccess, InterestEDDStatus, SDDEligibleType } from '@core/types'
+import { EarnEDDStatus, ExtractSuccess, FiatType } from '@core/types'
 import { selectors } from 'data'
 import { RootState } from 'data/rootReducer'
 import { UserDataType, UserTierType } from 'data/types'
@@ -20,23 +20,28 @@ const getData = (state: RootState) => {
   // @ts-ignore
   const userTiers = selectors.modules.profile.getTiers(state).getOrElse({} as UserTierType)
 
-  const sddEligible = selectors.components.buySell.getSddEligible(state).getOrElse({
-    eligible: false,
-    ineligibilityReason: 'KYC_TIER',
-    tier: 0
-  } as SDDEligibleType)
+  const earnEDDStatus = selectors.components.interest
+    .getEarnEDDStatus(state)
+    .getOrElse({} as EarnEDDStatus)
 
-  const interestEDDStatus = selectors.components.interest
-    .getInterestEDDStatus(state)
-    .getOrElse({} as InterestEDDStatus)
+  const walletCurrencyR = selectors.core.settings.getCurrency(state)
 
-  return lift((limitsAndDetails: ExtractSuccess<typeof limitsAndDetailsR>) => ({
-    interestEDDStatus,
-    limitsAndDetails,
-    sddEligible,
-    userData,
-    userTiers
-  }))(limitsAndDetailsR)
+  const productsR = selectors.custodial.getProductEligibilityForUser(state)
+
+  return lift(
+    (
+      limitsAndDetails: ExtractSuccess<typeof limitsAndDetailsR>,
+      products: ExtractSuccess<typeof productsR>,
+      walletCurrency: FiatType
+    ) => ({
+      earnEDDStatus,
+      limitsAndDetails,
+      products,
+      userData,
+      userTiers,
+      walletCurrency
+    })
+  )(limitsAndDetailsR, productsR, walletCurrencyR)
 }
 
 export default getData

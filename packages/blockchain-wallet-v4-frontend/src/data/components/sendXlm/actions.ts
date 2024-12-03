@@ -1,4 +1,4 @@
-import { CoinType, CrossBorderLimits, WalletAcountType, WalletFiatType } from '@core/types'
+import { CoinType, CrossBorderLimits, WalletAccountType, WalletFiatType } from '@core/types'
 
 import * as AT from './actionTypes'
 
@@ -18,6 +18,23 @@ export const paymentUpdatedFailure = (e) => ({
   payload: e,
   type: AT.SEND_XLM_PAYMENT_UPDATED_FAILURE
 })
+
+export const clearSendXlmMaxCustodialWithdrawalFee = () => ({
+  type: AT.CLEAR_SEND_XLM_MAX_CUSTODIAL_WITHDRAWAL_FEE
+})
+
+export const sendXlmFetchMaxCustodialWithdrawalFeeSuccess = (fee: string) => ({
+  payload: fee,
+  type: AT.SEND_XLM_FETCH_MAX_CUSTODIAL_WITHDRAWAL_FEE_SUCCESS
+})
+export const sendXlmFetchMaxCustodialWithdrawalFeeLoading = () => ({
+  type: AT.SEND_XLM_FETCH_MAX_CUSTODIAL_WITHDRAWAL_FEE_LOADING
+})
+export const sendXlmFetchMaxCustodialWithdrawalFeeFailure = (err) => ({
+  payload: err,
+  type: AT.SEND_XLM_FETCH_MAX_CUSTODIAL_WITHDRAWAL_FEE_FAILURE
+})
+
 export const firstStepMaximumAmountClicked = () => ({
   type: AT.SEND_XLM_FIRST_STEP_MAXIMUM_AMOUNT_CLICKED
 })
@@ -82,9 +99,9 @@ export const showNoAccountForm = (shouldShow) => ({
 
 export const sendXlmFetchLimits = (
   inputCurrency: CoinType,
-  fromAccount: WalletAcountType,
+  fromAccount: WalletAccountType,
   outputCurrency: CoinType,
-  toAccount: WalletAcountType,
+  toAccount: WalletAccountType,
   currency?: WalletFiatType
 ) => ({
   payload: {

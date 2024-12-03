@@ -1,5 +1,4 @@
 import BigNumber from 'bignumber.js'
-import { any } from 'ramda'
 
 /**
  * Wyvern order side: buy or sell.
@@ -80,11 +79,11 @@ export interface ExchangeMetadataForBundle {
 export type ExchangeMetadata = ExchangeMetadataForAsset | ExchangeMetadataForBundle
 
 export interface WyvernOrder {
-  basePrice: BigNumber
+  basePrice: BigNumber | string
   calldata: string
   exchange: string
   expirationTime: BigNumber
-  extra: BigNumber
+  extra: BigNumber | string
   feeMethod: number
   feeRecipient: string
   howToCall: number
@@ -95,7 +94,7 @@ export interface WyvernOrder {
   paymentToken: string
   replacementPattern: string
   saleKind: number
-  salt: BigNumber
+  salt: string
   side: number
   staticExtradata: string
   staticTarget: string
@@ -148,7 +147,7 @@ export interface Asset {
  * Types of asset contracts
  * Given by the asset_contract_type in the OpenSea API
  */
-export declare enum AssetContractType {
+export declare enum AssetContractTypeType {
   Fungible = 'fungible',
   NonFungible = 'non-fungible',
   SemiFungible = 'semi-fungible',
@@ -173,8 +172,28 @@ export interface OpenSeaAssetContract extends OpenSeaFees {
   stats?: object
   tokenSymbol: string
   traits?: object[]
-  type: AssetContractType
+  type: AssetContractTypeType
   wikiLink?: string
+}
+
+export interface OpenSeaStatus {
+  page: {
+    id: string
+    name: string
+    time_zone: string
+    updated_at: string
+    url: string
+  }
+  status: {
+    description: string
+    indicator: string
+  }
+}
+
+export interface OwnerNftBalance {
+  assets: NftAsset[]
+  next: string
+  previous: string
 }
 
 export interface ComputedFees extends OpenSeaFees {
@@ -259,11 +278,7 @@ export interface OpenSeaCollection extends OpenSeaFees {
 }
 
 export interface CollectionData {
-  collection_data: {
-    primary_asset_contracts: {
-      address: string
-      total_supply: number
-    }[]
+  collection_data: NftAsset['collection'] & {
     stats: Stats
   }
   name: string
@@ -340,7 +355,7 @@ export interface AssetEvent {
 export interface OpenSeaAsset extends Asset {
   assetContract: OpenSeaAssetContract
   backgroundColor: string | null
-  buyOrders: Order[] | null
+  buyOrders: NftOrder[] | null
   collection: OpenSeaCollection
   description: string
   externalLink: string
@@ -353,9 +368,9 @@ export interface OpenSeaAsset extends Asset {
   name: string
   numSales: number
   openseaLink: string
-  orders: Order[] | null
+  orders: NftOrder[] | null
   owner: OpenSeaAccount
-  sellOrders: Order[] | null
+  sellOrders: NftOrder[] | null
   traits: object[]
   transferFee: BigNumber | string | null
   transferFeePaymentToken: OpenSeaFungibleToken | null
@@ -373,7 +388,7 @@ export interface OpenSeaAssetBundle {
   maker: OpenSeaAccount
   name: string
   permalink: string
-  sellOrders: Order[] | null
+  sellOrders: NftOrder[] | null
   slug: string
 }
 export interface ECSignature {
@@ -385,7 +400,7 @@ export interface ECSignature {
  * Orders don't need to be signed if they're pre-approved
  * with a transaction on the contract to approveOrder_
  */
-export interface Order extends UnsignedOrder, Partial<ECSignature> {
+export interface NftOrder extends UnsignedOrder, Partial<ECSignature> {
   asset?: OpenSeaAsset
   assetBundle?: OpenSeaAssetBundle
   cancelledOrFinalized?: boolean
@@ -400,10 +415,15 @@ export interface Order extends UnsignedOrder, Partial<ECSignature> {
 }
 
 export enum GasCalculationOperations {
+  AcceptOffer = 'accept-offer',
   Buy = 'buy',
   Cancel = 'cancel',
+  CancelOffer = 'cancel-offer',
+  CancelOrder = 'cancel-order',
+  CreateOffer = 'create-offer',
   Sell = 'sell',
-  Transfer = 'transfer'
+  Transfer = 'transfer',
+  WrapEth = 'wrap-eth'
 }
 
 export interface GasDataI {
@@ -419,13 +439,13 @@ export interface txnData {
   gasPrice: number
 }
 
-export interface SellOrder {
+export interface WyvernRawOrder {
   approved_on_chain: boolean
   base_price: string
   bounty_multiple: string
   calldata: string
   cancelled: boolean
-  closing_date: null
+  closing_date: string | null
   closing_extendable: boolean
   created_date: string
   current_bounty: string
@@ -462,16 +482,7 @@ export interface SellOrder {
   }
   order_hash: string
   payment_token: string
-  payment_token_contract: {
-    address: string
-    decimals: number
-    eth_price: string
-    id: number
-    image_url: string
-    name: string
-    symbol: string
-    usd_price: string
-  }
+  payment_token_contract: PaymentTokenContractType
   prefixed_hash: string
   quantity: string
   r: string
@@ -494,72 +505,91 @@ export interface SellOrder {
   v: number
 }
 
+interface AssetContractType {
+  address: string
+  asset_contract_type: string
+  buyer_fee_basis_points: number
+  created_date: string
+  default_to_fiat: boolean
+  description: string
+  dev_buyer_fee_basis_points: number
+  dev_seller_fee_basis_points: number
+  external_link: string | null
+  image_url: null
+  name: string
+  nft_version: null
+  only_proxied_transfers: boolean
+  opensea_buyer_fee_basis_points: number
+  opensea_seller_fee_basis_points: number
+  opensea_version: string
+  owner: number
+  payout_address: null
+  schema_name: WyvernSchemaName
+  seller_fee_basis_points: number
+  symbol: string
+  total_supply: null
+}
+
+export interface PaymentTokenContractType {
+  address: string
+  decimals: number
+  eth_price: string
+  image_url: string
+  name: string
+  symbol: string
+  usd_price: string
+}
+
+export interface NftCollection {
+  banner_image_url: string
+  chat_url: null
+  created_date: string
+  default_to_fiat: boolean
+  description: string
+  dev_buyer_fee_basis_points: string
+  dev_seller_fee_basis_points: string
+  discord_url: string
+  display_data: {
+    card_display_style: string
+  }
+  editors: string[]
+  external_url: string
+  featured: boolean
+  featured_image_url: string
+  hidden: boolean
+  image_url: string
+  instagram_username: null
+  is_subject_to_whitelist: boolean
+  large_image_url: string
+  medium_username: null
+  name: string
+  only_proxied_transfers: boolean
+  opensea_buyer_fee_basis_points: string
+  opensea_seller_fee_basis_points: string
+  payment_tokens: PaymentTokenContractType[]
+  payout_address: string
+  primary_asset_contracts: AssetContractType[]
+  require_email: boolean
+  safelist_request_status: string
+  short_description: null
+  slug: string
+  stats: Stats
+  telegram_url: null
+  traits: {
+    [key in string]: {
+      [key in string]: number
+    }
+  }
+  twitter_username: string
+  wiki_url: null
+}
+
 export interface NftAsset {
   animation_original_url: null
   animation_url: null
-  asset_contract: {
-    address: string
-    asset_contract_type: string
-    buyer_fee_basis_points: number
-    created_date: string
-    default_to_fiat: boolean
-    description: string
-    dev_buyer_fee_basis_points: number
-    dev_seller_fee_basis_points: number
-    external_link: string | null
-    image_url: null
-    name: string
-    nft_version: null
-    only_proxied_transfers: boolean
-    opensea_buyer_fee_basis_points: number
-    opensea_seller_fee_basis_points: number
-    opensea_version: string
-    owner: number
-    payout_address: null
-    schema_name: WyvernSchemaName
-    seller_fee_basis_points: number
-    symbol: string
-    total_supply: null
-  }
+  asset_contract: AssetContractType
   background_color: null | string
-  collection: {
-    banner_image_url: string
-    chat_url: string | null
-    created_date: string
-    default_to_fiat: boolean
-    description: string | null
-    dev_buyer_fee_basis_points: string
-    dev_seller_fee_basis_points: string
-    discord_url: string | null
-    display_data: {
-      card_display_style: string
-    }
-    external_url: string | null
-    featured: boolean
-    featured_image_url: string
-    hidden: boolean
-    image_url: string
-    instagram_username: string | null
-    is_subject_to_whitelist: boolean
-    large_image_url: string
-    medium_username: string | null
-    name: string
-    only_proxied_transfers: boolean
-    opensea_buyer_fee_basis_points: string
-    opensea_seller_fee_basis_points: string
-    payment_tokens: {
-      symbol: string
-    }[]
-    payout_address: string
-    require_email: boolean
-    safelist_request_status: string
-    short_description: null
-    slug: string
-    stats: Stats
-    telegram_url: string | null
-    twitter_username: string | null
-    wiki_url: null
-  }
+  collection: NftCollection
   creator: {
     address: string
     config: string
@@ -627,7 +657,7 @@ export interface NftAsset {
   listing_date: null
   name: string
   num_sales: number
-  orders: Order[]
+  orders: WyvernRawOrder[] | null
   owner: {
     address: string
     config: string
@@ -636,15 +666,35 @@ export interface NftAsset {
       username: string | null
     }
   }
-
+  ownership?: {
+    owner: {
+      address: string
+      config: string
+      profile_img_url: string
+      user: { username: string }
+    }
+    quantity: number
+  }
   permalink: string
-  sell_orders: SellOrder[]
+  seaport_sell_orders: SeaportRawOrder[] | null
   token_id: string
   token_metadata: null
   top_bid: null
+  top_ownerships?: [
+    {
+      owner: {
+        address: string
+        config: string
+        profile_img_url: string
+        user: { username: string }
+      }
+      quantity: number
+    }
+  ]
   traits: [
     {
       trait_count: number
+      trait_max_value: number
       trait_type: string
       value: string
     }
@@ -653,13 +703,11 @@ export interface NftAsset {
   transfer_fee_payment_token: null
 }
 
-export type NftAssetsType = {
-  assets: NftAsset[]
-}
+export type NftAssetsType = NftAsset[]
 
 export type NftOrdersType = {
   count: number
-  orders: Order[]
+  orders: NftOrder[]
 }
 
 export enum SolidityTypes {
@@ -722,36 +770,10 @@ export interface Stats {
   total_volume: number
 }
 
-export type AssetEventsType = {
-  asset_events: {
-    approved_account: any
-    asset: NftAsset
-    created_date: string
-  }[]
-}
-
-export type OfferEventsType = {
-  asset_events: {
-    approved_account: any
-    asset: NftAsset
-    bid_amount: string
-    created_date: string
-    payment_token: {
-      address: string
-      decimals: number
-      eth_price: string
-      id: number
-      image_url: string
-      name: string
-      symbol: string
-      usd_price: string
-    }
-  }[]
-}
-
 export interface ExplorerGatewayNftCollectionType {
   added_timestamp: string
   average_price: string
+  collection_data: CollectionData['collection_data']
   count: number
   created_timestamp: string
   floor_price: string
@@ -768,4 +790,145 @@ export interface ExplorerGatewayNftCollectionType {
   total_sales: number
   total_supply: number
   total_volume: string
+}
+
+// Only keeping around relevant info for now
+export type ExplorerGatewaySearchType = {
+  accounts: {
+    address: string
+    config: string
+    date_ingested: string
+    profile_img_url: string
+    username: string | null
+  }[]
+  assets: {
+    collection_slug: string
+    contract_address: string
+    id: string
+    image_original_url: string
+    image_preview_url: string
+    image_thumbnail_url: string
+    image_url: string
+    name: string
+    token_id: string
+  }[]
+  collections: {
+    image_url: string | null
+    name: string
+    num_owners: null
+    safelist_request_status: string
+    slug: string
+  }[]
+  contracts: {
+    address: string
+    asset_contract_type: string
+    created_date: string
+    date_ingested: string
+    nft_version: string
+    owner: string | null
+    schema_name: string
+    symbol: string
+    total_supply: string
+  }[]
+}
+
+export type NftUserPreferencesType = {
+  auction_expired: boolean | null
+  bid_activity: boolean | null
+  item_sold: boolean | null
+  offer_accepted: boolean | null
+  outbid: boolean | null
+  successful_purchase: boolean | null
+}
+
+export type NftUserPreferencesReturnType = {
+  auction_expired: boolean | null
+  bid_activity: boolean | null
+  item_sold: boolean | null
+  last_updated: string
+  offer_accepted: boolean | null
+  outbid: boolean | null
+  successful_purchase: boolean | null
+}
+
+export type SeaportRawOrder = {
+  cancelled: false
+  client_signature: string
+  closing_date: string
+  created_date: string
+  current_price: string
+  expiration_time: number
+  finalized: boolean
+  listing_time: number
+  maker: {
+    address: string
+    config: ''
+    profile_img_url: string
+    user: number | null
+  }
+  maker_fees: {
+    account: {
+      address: string
+      config: ''
+      profile_img_url: string
+      user: number | null
+    }
+    basis_points: string
+  }[]
+  marked_invalid: boolean
+  order_hash: string
+  order_type: 'basic'
+  protocol_address: string
+  protocol_data: {
+    parameters: {
+      conduitKey: string
+      consideration: {
+        endAmount: string
+        identifierOrCriteria: string
+        itemType: number
+        recipient: string
+        startAmount: string
+        token: string
+      }[]
+      counter: number
+      endTime: string
+      offer: [
+        {
+          endAmount: string
+          identifierOrCriteria: string
+          itemType: number
+          startAmount: string
+          token: string
+        }
+      ]
+      offerer: string
+      orderType: number
+      salt: string
+      startTime: string
+      totalOriginalConsiderationItems: number
+      zone: string
+      zoneHash: string
+    }
+    signature: string
+  }
+  relay_id: string
+  side: 'ask' | 'bid'
+  taker: {
+    address: string
+    config: ''
+    profile_img_url: string
+    user: number | null
+  } | null
+  taker_fees: []
+}
+
+export type NftTemplateParams = {
+  amount?: string | null // ETH
+  nft_activity_link: string
+  nft_bidder?: string | null
+  nft_image: string
+  nft_marketplace_link: string
+  nft_name: string
+  nft_seller?: string | null
+  value?: string | null // USD
 }

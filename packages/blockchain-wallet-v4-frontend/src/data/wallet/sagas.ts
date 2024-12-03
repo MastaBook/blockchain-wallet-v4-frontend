@@ -1,8 +1,12 @@
+import * as Bitcoin from 'bitcoinjs-lib'
 import { prop } from 'ramda'
 import { call, put, race, select, take } from 'redux-saga/effects'
 
-import { Remote } from '@core'
+import { Remote, Types } from '@core'
+import { LEGACY_DERIVATION_TYPE } from '@core/types/HDAccount'
 import { actions, actionTypes, selectors } from 'data'
+import { Analytics } from 'data/analytics/types'
+import { ModalName } from 'data/types'
 import * as C from 'services/alerts'
 import { requireUniqueWalletName } from 'services/forms'
 import { checkForVulnerableAddressError } from 'services/misc'
@@ -129,7 +133,7 @@ export default ({ coreSagas }) => {
     const addressLabelSize = yield call(coreSagas.kvStore.btc.fetchMetadataBtc)
     if (addressLabelSize > 100) {
       yield put(
-        actions.modals.showModal('UPGRADE_ADDRESS_LABELS_MODAL', {
+        actions.modals.showModal(ModalName.UPGRADE_ADDRESS_LABELS_MODAL, {
           duration: addressLabelSize / 20,
           origin: 'LoginSaga'
         })
@@ -167,8 +171,67 @@ export default ({ coreSagas }) => {
     }
   }
 
+  const checkXpubCacheLegitimacy = function* () {
+    const wallet = yield select(selectors.core.wallet.getWallet)
+    const accounts = Types.Wallet.selectHDAccounts(wallet)
+    const first5 = accounts.slice(0, 5)
+
+    let isValidReceive = true
+    let isValidChange = true
+    let shouldIgnore = false
+    first5.forEach((account) => {
+      const legacyDerivation = account.derivations.find(
+        (derivation) => derivation.type === LEGACY_DERIVATION_TYPE
+      )
+      const { xpub: legacyXpub } = legacyDerivation
+      const legacyAccountNode = Bitcoin.bip32.fromBase58(legacyXpub)
+      const legacyReceive = legacyAccountNode.derive(0).neutered().toBase58()
+
+      account.derivations.forEach((derivation) => {
+        const { cache, xpub } = derivation
+        const { changeAccount, receiveAccount } = cache
+        const accountNode = Bitcoin.bip32.fromBase58(xpub)
+
+        const validReceive = accountNode.derive(0).neutered().toBase58()
+        const validChange = accountNode.derive(1).neutered().toBase58()
+
+        if (derivation.type === 'bech32' && receiveAccount === legacyReceive) {
+          shouldIgnore = true
+        }
+
+        if (receiveAccount !== validReceive) {
+          isValidReceive = false
+        }
+        if (changeAccount !== validChange) {
+          isValidChange = false
+        }
+      })
+    })
+
+    if (shouldIgnore) return
+
+    if (!isValidReceive) {
+      yield put(
+        actions.analytics.trackEvent({
+          key: Analytics.WRONG_RECEIVE_CACHE,
+          properties: {}
+        })
+      )
+    }
+
+    if (!isValidChange) {
+      yield put(
+        actions.analytics.trackEvent({
+          key: Analytics.WRONG_CHANGE_CACHE,
+          properties: {}
+        })
+      )
+    }
+  }
+
   return {
     checkDataErrors,
+    checkXpubCacheLegitimacy,
     editBtcAccountLabel,
     setMainPassword,
     toggleSecondPassword,

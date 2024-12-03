@@ -1,5 +1,5 @@
 import { contains, prop, sum, toLower } from 'ramda'
-import { call, put, select } from 'redux-saga/effects'
+import { all, call, put, select } from 'redux-saga/effects'
 
 import * as pairing from '../../pairing'
 import * as selectors from '../selectors'
@@ -42,14 +42,21 @@ export default ({ api }) => {
     // return response
   }
 
-  const setEmail = function* ({ email }) {
+  const setEmail = function* (email, nabuSessionToken) {
+    // use feature flag for latest secure enpoint
+    // in case it needs to be rolled back
+    const secureUpdate = (yield select(selectors.walletOptions.getSecureEmailSmsUpdate)).getOrElse(
+      false
+    )
     const guid = yield select(wS.getGuid)
     const sharedKey = yield select(wS.getSharedKey)
-    const response = yield call(api.updateEmail, guid, sharedKey, email)
+    const response = secureUpdate
+      ? yield call(api.secureUpdateEmail, guid, sharedKey, email, nabuSessionToken)
+      : yield call(api.updateEmail, guid, sharedKey, email)
     if (!contains('updated', toLower(response))) {
       throw new Error(response)
     }
-    yield put(actions.setEmail(email))
+    yield put(actions.setEmail(email, nabuSessionToken))
   }
 
   const sendConfirmationCodeEmail = function* ({ email }) {
@@ -80,11 +87,18 @@ export default ({ api }) => {
     if (!prop('success', response)) throw new Error(JSON.stringify(response))
   }
 
-  const setMobile = function* ({ mobile }) {
+  const setMobile = function* (mobile, nabuSessionToken) {
+    // use feature flag for latest secure enpoint
+    // in case it needs to be rolled back
+    const secureUpdate = (yield select(selectors.walletOptions.getSecureEmailSmsUpdate)).getOrElse(
+      false
+    )
     const guid = yield select(wS.getGuid)
     const sharedKey = yield select(wS.getSharedKey)
-    const response = yield call(api.updateMobile, guid, sharedKey, mobile)
-    yield put(actions.setMobile(mobile))
+    const response = secureUpdate
+      ? yield call(api.secureUpdateMobile, guid, sharedKey, mobile, nabuSessionToken)
+      : yield call(api.updateMobile, guid, sharedKey, mobile)
+    yield put(actions.setMobile(mobile, nabuSessionToken))
     return response
   }
 
@@ -114,7 +128,10 @@ export default ({ api }) => {
   const setLanguage = function* ({ language }) {
     const guid = yield select(wS.getGuid)
     const sharedKey = yield select(wS.getSharedKey)
-    const response = yield call(api.updateLanguage, guid, sharedKey, language)
+    const response = yield all([
+      call(api.updateLanguage, guid, sharedKey, language),
+      call(api.updateCommunicationLanguage, language)
+    ])
     if (!contains('successfully', toLower(response))) {
       throw new Error(response)
     }
@@ -142,6 +159,10 @@ export default ({ api }) => {
       throw new Error(response)
     }
     yield put(actions.setCurrency(currency))
+  }
+
+  const setTradingCurrency = function* ({ currency }) {
+    yield call(api.setUserCurrentCurrency, currency)
   }
 
   const setAutoLogout = function* ({ autoLogout }) {
@@ -300,6 +321,7 @@ export default ({ api }) => {
     setMobileVerifiedAs2FA,
     setNotificationsOn,
     setNotificationsType,
+    setTradingCurrency,
     setYubikey,
     verifyEmailCode
   }

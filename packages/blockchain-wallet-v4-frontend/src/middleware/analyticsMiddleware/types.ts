@@ -1,20 +1,17 @@
+import { Coin } from '@core'
 import { BSPaymentTypes } from '@core/types'
 import { RecurringBuyOrigins, RecurringBuyPeriods, SetPeriodPayload } from 'data/types'
 
 enum AnalyticsKey {
-  ACCOUNT_PASSWORD_RESET = 'Account Password Reset',
   ADDRESS_VERIFY_MESSAGE_CLICKED = 'Address Verify Message Clicked',
   ADD_MOBILE_NUMBER_CLICKED = 'Add Mobile Number Clicked',
   AMOUNT_SWITCHED = 'Amount Switched',
-  BUY_AMOUNT_ENTERED = 'Buy Amount Entered',
   BUY_AMOUNT_MAX_CLICKED = 'Buy Amount Max Clicked',
   BUY_AMOUNT_MIN_CLICKED = 'Buy Amount Min Clicked',
-  BUY_PAYMENT_METHOD_SELECTED = 'Buy Payment Method Selected',
   BUY_SELL_CLICKED = 'Buy Sell Clicked',
   BUY_SELL_VIEWED = 'Buy Sell Viewed',
   CANCEL_RECURRING_BUY_CLICKED = 'Cancel Recurring Buy Clicked',
   CHANGE_MOBILE_NUMBER_CLICKED = 'Change Mobile Number Clicked',
-  CLOUD_BACKUP_CODE_SCANNED = 'Cloud Backup Code Scanned',
   CRYPTO_LINK_HANDLING_CLICKED = 'Crypto Link Handling Clicked',
   DASHBOARD_CLICKED = 'Dashboard Clicked',
   DASHBOARD_VIEWED = 'Dashboard Viewed',
@@ -22,41 +19,21 @@ enum AnalyticsKey {
   DEPOSIT_CLICKED = 'Deposit Clicked',
   DEPOSIT_METHOD_SELECTED = 'Deposit Method Selected',
   DEPOSIT_VIEWED = 'Deposit Viewed',
-  DEVICE_VERIFIED = 'Device Verified',
   EMAIL_VERIFICATION_REQUESTED = 'Email Verification Requested',
   EMAIL_VERIFICATION_SKIPPED = 'Email Verification Skipped',
   IMPORT_ADDRESS_CLICKED = 'Import Address Clicked',
   INTEREST_CLICKED = 'Interest Clicked',
-  INTEREST_DEPOSIT_AMOUNT_ENTERED = 'Interest Deposit Amount Entered',
   INTEREST_DEPOSIT_CLICKED = 'Interest Deposit Clicked',
-  INTEREST_DEPOSIT_MAX_AMOUNT_CLICKED = 'Interest Deposit Max Amount Clicked',
-  INTEREST_DEPOSIT_MIN_AMOUNT_CLICKED = 'Interest Deposit Min Amount Clicked',
   INTEREST_DEPOSIT_VIEWED = 'Interest Deposit Viewed',
-  INTEREST_SUBMIT_INFORMATION_CLICKED = 'Interest Submit Information Clicked',
   INTEREST_VIEWED = 'Interest Viewed',
   INTEREST_WITHDRAWAL_CLICKED = 'Interest Withdrawal Clicked',
   INTEREST_WITHDRAWAL_VIEWED = 'Interest Withdrawal Viewed',
   LINK_BANK_CLICKED = 'Link Bank Clicked',
-  LOGIN_HELP_CLICKED = 'Login Help Clicked',
-  LOGIN_IDENTIFIER_ENTERED = 'Login Identifier Entered',
-  LOGIN_METHOD_SELECTED = 'Login Method Selected',
-  LOGIN_PASSWORD_DENIED = 'Login Password Denied',
-  LOGIN_PASSWORD_ENTERED = 'Login Password Entered',
-  LOGIN_REQUEST_APPROVED = 'Login Request Approved',
-  LOGIN_REQUEST_DENIED = 'Login Request Denied',
-  LOGIN_TWO_STEP_VERIFICATION_DENIED = 'Login Two Step Verification Denied',
-  LOGIN_TWO_STEP_VERIFICATION_ENTERED = 'Login Two Step Verification Entered',
-  LOGIN_VIEWED = 'Login Viewed',
   MANAGE_TAB_SELECTION_CLICKED = 'Manage Tab Selection Clicked',
-  NEW_ACCOUNT_PASSWORD_ENTERED = 'New Account Password Entered',
   NOTIFICATION_PREFERENCES_UPDATED = 'Notification Preferences Updated',
   PRIVATE_KEYS_SHOWN = 'Private Keys Shown',
   RECEIVE_CURRENCY_SELECTED = 'Receive Currency Selected',
   RECEIVE_DETAILS_COPIED = 'Receive Details Copied',
-  RECOVERY_OPTION_SELECTED = 'Recovery Option Selected',
-  RECOVERY_PHRASE_ENTERED = 'Recovery Phrase Entered',
-  RECURRING_BUY_ACTIVATED = 'Recurring Buy Activated',
-  RECURRING_BUY_CANCELLED = 'Recurring Buy Cancelled',
   RECURRING_BUY_CLICKED = 'Recurring Buy Clicked',
   RECURRING_BUY_DETAILS_CLICKED = 'Recurring Buy Details Clicked',
   RECURRING_BUY_INFO_VIEWED = 'Recurring Buy Info Viewed',
@@ -64,8 +41,6 @@ enum AnalyticsKey {
   RECURRING_BUY_PERIOD_SELECTED = 'Recurring Buy Period Selected',
   RECURRING_BUY_SUGGESTION_SKIPPED = 'Recurring Buy Suggestion Skipped',
   RECURRING_BUY_VIEWED = 'Recurring Buy Viewed',
-  RESET_ACCOUNT_CANCELLED = 'Reset Account Cancelled',
-  RESET_ACCOUNT_CLICKED = 'Reset Account Clicked',
   SELL_AMOUNT_ENTERED = 'Sell Amount Entered',
   SELL_AMOUNT_MAX_CLICKED = 'Sell Amount Max Clicked',
   SELL_AMOUNT_MIN_CLICKED = 'Sell Amount Min Clicked',
@@ -77,30 +52,12 @@ enum AnalyticsKey {
   SETTINGS_CURRENCY_CLICKED = 'Settings Currency Clicked',
   SETTINGS_HYPERLINK_CLICKED = 'Settings Hyperlink Clicked',
   SETTINGS_TAB_CLICKED = 'Settings Tab Clicked',
-  SIGNED_IN = 'Signed In',
-  SIGNED_OUT = 'Signed Out',
-  SIGN_UP_COUNTRY_SELECTED = 'Sign Up Country Selected',
-  SIGN_UP_COUNTRY_STATE_SELECTED = 'Sign Up Country State Selected',
-  SWAP_ACCOUNTS_SELECTED = 'Swap Accounts Selected',
-  SWAP_AMOUNT_ENTERED = 'Swap Amount Entered',
   SWAP_AMOUNT_MAX_CLICKED = 'Swap Amount Max Clicked',
   SWAP_AMOUNT_MIN_CLICKED = 'Swap Amount Min Clicked',
-  SWAP_CLICKED = 'Swap Clicked',
-  SWAP_FROM_SELECTED = 'Swap From Selected',
-  SWAP_RECEIVE_SELECTED = 'Swap Receive Selected',
-  SWAP_REQUESTED = 'Swap Requested',
-  SWAP_VIEWED = 'Swap Viewed',
-  TRANSFER_IMPORTED_ADDRESS_CLICKED = 'Transfer Imported Addresses Clicked', // TODO
   UPGRADE_VERIFICATION_CLICKED = 'Upgrade Verification Clicked',
-  WALLET_SIGNED_UP = 'Wallet Signed Up',
-  WITHDRAWAL_AMOUNT_ENTERED = 'Withdrawal Amount Entered',
-  WITHDRAWAL_AMOUNT_MAX_CLICKED = 'Withdrawal Amount Max Clicked',
-  WITHDRAWAL_AMOUNT_MIN_CLICKED = 'Withdrawal Amount Min Clicked',
   WITHDRAWAL_CLICKED = 'Withdrawal Clicked',
   WITHDRAWAL_METHOD_SELECTED = 'Withdrawal Method Selected',
-  WITHDRAWAL_VIEWED = 'Withdrawal Viewed',
-  WRONG_CHANGE_CACHE = 'Wrong Change Cache',
-  WRONG_RECEIVE_CACHE = 'Wrong Receive Cache'
+  WITHDRAWAL_VIEWED = 'Withdrawal Viewed'
 }
 
 type AnalyticsTraits = {
@@ -119,11 +76,6 @@ enum AccountType {
   SAVINGS = 'SAVINGS',
   TRADING = 'TRADING',
   USERKEY = 'USERKEY'
-}
-
-enum Coin {
-  CRYPTO = 'CRYPTO',
-  FIAT = 'FIAT'
 }
 
 enum Order {
@@ -150,10 +102,11 @@ enum DepositMethod {
   BANK_TRANSFER = 'BANK_TRANSFER'
 }
 
-enum LoginHelpClikedOrigin {
+enum LoginHelpClickedOrigin {
   IDENTIFIER = 'IDENTIFIER',
   PASSWORD = 'PASSWORD',
-  QR_CODe = 'QR_CODE'
+  QR_CODE = 'QR_CODE',
+  UPGRADE_ACCOUNT_NEW_PASSWORD = 'UPGRADE_ACCOUNT_NEW_PASSWORD'
 }
 
 enum SendReceive {
@@ -180,7 +133,7 @@ type PageViewPayload = {
 
 type PageName =
   | '/home'
-  | '/rewards'
+  | '/earn'
   | '/login'
   | '/settings/addresses/btc'
   | '/settings/addresses/bch'
@@ -359,13 +312,17 @@ type LinkBankClickedPayload = BasePayload & {
 }
 
 type LoginHelpClickedPayload = BasePayload & {
-  origin: LoginHelpClikedOrigin
+  origin: LoginHelpClickedOrigin
   site_redirect: 'WALLET' | 'EXCHANGE'
 }
 
 type LoginRequestApprovedOrFailedPayload = BasePayload & {
   error?: 'REJECTED' | 'EXPIRED' | 'TIMED_OUT' | 'UNKNOWN'
   method: 'SECURE_CHANNEL' | 'MAGIC_LINK'
+}
+
+type LoginViewed = BasePayload & {
+  device_origin: string
 }
 
 type SignUpCountrySelectPayload = BasePayload & {
@@ -377,6 +334,11 @@ type SignUpCountryStateSelectPayload = BasePayload & {
 
 type LoginIdentifierEnteredPayload = BasePayload & {
   identifier_type: 'EMAIL' | 'WALLET_ID'
+}
+
+type LoginIdentifierFailedPayload = BasePayload & {
+  error_code: string
+  error_message: string
 }
 
 type LoginMethodSelectedPayload = BasePayload & {
@@ -450,7 +412,7 @@ export type RecurringBuyCancelPayload = BasePayload & {
   frequency: RecurringBuyPeriods
   input_amount: number
   input_currency: string
-  origin: keyof typeof RecurringBuyOrigins
+  origin: 'TRANSACTION_DETAILS' | 'RECURRING_BUY_DETAILS'
   output_currency: string
   payment_method: BSPaymentTypes
 }
@@ -461,7 +423,7 @@ export type RecurringBuyClickedPayload = BasePayload & {
 
 export type RecurringBuyDetailsClickedPayload = BasePayload & {
   currency: string
-  origin: keyof typeof RecurringBuyOrigins
+  origin: 'CURRENCY_PAGE' | 'TRANSACTION_LIST'
 }
 
 type SellAmountEnteredPayload = BasePayload & {
@@ -513,7 +475,7 @@ type SendFromSelectedPayload = BasePayload & {
   from_account_type: AccountType
 }
 
-type SendReceiveClickedOrigin = 'NAVIGATION'
+type SendReceiveClickedOrigin = 'CURRENCY_PAGE' | 'NAVIGATION' | 'NO_HOLDINGS' | 'TRANSACTIONS_PAGE'
 
 type SendReceiveClickedPayload = BasePayload & {
   currency: string
@@ -545,7 +507,7 @@ type SettingsHyperlinkClickedPayload = BasePayload & {
 type SettingsTabClickedDestination =
   | 'GENERAL'
   | 'PREFERENCES'
-  | 'TRADING_LIMITS_MODAL'
+  | 'TRADING_LIMITS'
   | 'WALLETS&ADDRESSES'
 
 type SettingsTabClickedPayload = BasePayload & {
@@ -641,6 +603,7 @@ type UpgradeVerificationClickedOrigin =
   | 'UNKNOWN'
 
 type UpgradeVerificationClickedPayload = BasePayload & {
+  currency: string
   origin: UpgradeVerificationClickedOrigin
   tier: number
 }
@@ -678,6 +641,10 @@ type WrongChangeCachePayload = BasePayload
 
 type WrongReceiveCachePayload = BasePayload
 
+type PeekSheetPayload = BasePayload & {
+  current_step_completed: string
+}
+
 type AnalyticsProperties =
   | AddressVerifyMessageClickedPayload
   | AddMobileNumberClickedPayload
@@ -712,12 +679,15 @@ type AnalyticsProperties =
   | LinkBankClickedPayload
   | LoginHelpClickedPayload
   | LoginIdentifierEnteredPayload
+  | LoginIdentifierFailedPayload
   | LoginMethodSelectedPayload
   | LoginRequestPayload
   | LoginRequestApprovedOrFailedPayload
+  | LoginViewed
   | ManageTabSelectionClickedPayload
   | NotificationPreferencesUpdatedPayload
   | PrivateKeysShownPayload
+  | PeekSheetPayload
   | ReceiveCurrencySelectedPayload
   | ReceiveDetailsCopiedPayload
   | RecoveryOptionSelectedPayload
@@ -795,6 +765,11 @@ export type {
   SwapClickedOrigin,
   UpgradeVerificationClickedOrigin,
   WithdrawalClickedOrigin
+}
+
+export interface TrackEventAction {
+  key: AnalyticsKey
+  properties: AnalyticsProperties
 }
 
 export {

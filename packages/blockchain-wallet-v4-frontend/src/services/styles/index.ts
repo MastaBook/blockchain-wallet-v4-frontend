@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { mergeAll } from 'ramda'
 import { css } from 'styled-components'
 
@@ -67,12 +67,12 @@ export const isMobile = () => window.outerWidth <= 479
 
 export const sizes = {
   desktop: 2560,
-  laptop: 1023,
-  laptopL: 1439,
-  laptopM: 1279,
-  mobile: 479,
-  tablet: 767,
-  tabletL: 991
+  laptop: 1024,
+  laptopL: 1440,
+  laptopM: 1280,
+  mobile: 480,
+  tablet: 768,
+  tabletL: 992
 }
 
 export const heights = {
@@ -110,14 +110,18 @@ export type MediaHeightServiceType = {
 export const media = Object.keys(sizes).reduce((acc, label) => {
   acc[label] = (...args) => css`
     @media (max-width: ${sizes[label]}px) {
-      // @ts-ignore
-      ${css(...args)};
+      ${css(
+        // @ts-ignore
+        ...args
+      )};
     }
   `
   acc[`atLeast${label[0].toUpperCase()}${label.slice(1, label.length)}`] = (...args) => css`
     @media (min-width: ${sizes[label] + 1}px) {
-      // @ts-ignore
-      ${css(...args)};
+      ${css(
+        // @ts-ignore
+        ...args
+      )};
     }
   `
 
@@ -125,13 +129,15 @@ export const media = Object.keys(sizes).reduce((acc, label) => {
 }, {}) as MediaServiceType
 
 export function useMedia(size: Sizes): boolean {
-  const getSize = () => {
-    if (window.innerWidth <= sizes[size]) {
-      return true
-    }
+  const getSize = useMemo(() => {
+    return () => {
+      if (window.innerWidth <= sizes[size]) {
+        return true
+      }
 
-    return false
-  }
+      return false
+    }
+  }, [size])
 
   const [isSize, setIsSize] = useState(getSize())
 
@@ -150,8 +156,10 @@ export function useMedia(size: Sizes): boolean {
 export const mediaHeight = Object.keys(heights).reduce((acc, label) => {
   acc[label] = (...args) => css`
     @media (max-height: ${heights[label]}px) {
-      // @ts-ignore
-      ${css(...args)};
+      ${css(
+        // @ts-ignore
+        ...args
+      )};
     }
   `
   return acc

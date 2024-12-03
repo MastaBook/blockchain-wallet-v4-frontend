@@ -1,19 +1,30 @@
 import BigNumber from 'bignumber.js'
-import moment from 'moment'
-import { call, delay, put, race, select, take } from 'redux-saga/effects'
+import { differenceInMilliseconds } from 'date-fns'
+import { call, delay, put, select, take } from 'redux-saga/effects'
+import { call as typedCall } from 'typed-redux-saga'
 
 import { Exchange } from '@core'
 import { APIType } from '@core/network/api'
-import { CoinType, PaymentType, PaymentValue, SwapQuoteType } from '@core/types'
-import { errorHandler } from '@core/utils'
+import Remote from '@core/remote'
+import { ExtraKYCContext, PaymentType, Product, SwapOrderDirection } from '@core/types'
+import { Coin, errorHandler } from '@core/utils'
 import { actions, selectors } from 'data'
 import { SWAP_ACCOUNTS_SELECTOR } from 'data/coins/model/swap'
 import { getCoinAccounts } from 'data/coins/selectors'
 import { generateProvisionalPaymentAmount } from 'data/coins/utils'
-import { NabuProducts } from 'data/types'
+import {
+  CustodialSanctionsEnum,
+  ModalName,
+  NabuProducts,
+  ProductEligibilityForUser,
+  VerifyIdentityOriginType
+} from 'data/types'
+import { isNabuError } from 'services/errors'
+import { getExtraKYCCompletedStatus } from 'services/sagas/extraKYC'
 
+import { actions as custodialActions } from '../../custodial/slice'
 import profileSagas from '../../modules/profile/sagas'
-import { convertStandardToBase } from '../exchange/services'
+import { convertBaseToStandard, convertStandardToBase } from '../exchange/services'
 import sendSagas from '../send/sagas'
 import { selectReceiveAddress } from '../utils/sagas'
 import { FALLBACK_DELAY } from './model'
@@ -26,7 +37,14 @@ import {
   SwapAmountFormValues,
   SwapBaseCounterTypes
 } from './types'
-import { getDirection, getPair, getRate, NO_QUOTE } from './utils'
+import {
+  getDirection,
+  getPair,
+  getPaymentMethod,
+  getProfile,
+  getQuoteRefreshConfig,
+  isValidInputAmount
+} from './utils'
 
 export default ({ api, coreSagas, networks }: { api: APIType; coreSagas; networks }) => {
   const { buildAndPublishPayment, paymentGetOrElse } = sendSagas({
@@ -34,7 +52,7 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas; network
     coreSagas,
     networks
   })
-  const { waitForUserData } = profileSagas({ api, coreSagas, networks })
+  const { isTier2, waitForUserData } = profileSagas({ api, coreSagas, networks })
 
   const cancelOrder = function* ({ payload }: ReturnType<typeof A.cancelOrder>) {
     try {
@@ -114,15 +132,14 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas; network
   const changeTrendingPair = function* ({ payload }: ReturnType<typeof A.changeTrendingPair>) {
     yield put(actions.form.change('initSwap', 'BASE', payload.baseAccount))
     yield put(actions.form.change('initSwap', 'COUNTER', payload.counterAccount))
-    yield put(A.setStep({ step: 'ENTER_AMOUNT' }))
+    yield put(A.setStep({ isSuggestedPair: true, step: 'ENTER_AMOUNT' }))
   }
 
   const calculateProvisionalPayment = function* (
     source: SwapAccountType,
-    quote: SwapQuoteType,
     amount,
     fee: MempoolFeeType = 'priority'
-  ): Generator<any, PaymentValue | { coin: CoinType; effectiveBalance: number }, PaymentType> {
+  ) {
     try {
       const { coin } = source
       const addressOrIndex = source.address
@@ -139,9 +156,24 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas; network
 
       const paymentAmount = generateProvisionalPaymentAmount(coin, amount)
       payment = yield payment.amount(paymentAmount)
-      // TODO, add isMemoBased check
-      const sampleAddr = quote.sampleDepositAddress.split(':')[0]
-      return (yield payment.chain().to(sampleAddr, 'ADDRESS').build().done()).value()
+
+      const paymentAccount: ReturnType<typeof api.getPaymentAccount> = yield call(
+        api.getPaymentAccount,
+        coin
+      )
+
+      const addressForPayment = paymentAccount.agent?.address
+        ? paymentAccount.agent.address
+        : paymentAccount.address
+
+      return (
+        (yield payment
+          .chain()
+          // TODO, add isMemoBased check
+          .to(addressForPayment.split(':')[0], 'ADDRESS')
+          .build()
+          .done()).value()
+      )
     } catch (e) {
       // eslint-disable-next-line
       console.log(e)
@@ -173,20 +205,25 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas; network
       const { BASE, COUNTER } = initSwapFormValues
 
       const direction = getDirection(BASE, COUNTER)
-      onChain = direction === 'ON_CHAIN' || direction === 'FROM_USERKEY'
-      toChain = direction === 'ON_CHAIN' || direction === 'TO_USERKEY'
+      onChain =
+        direction === SwapOrderDirection.ON_CHAIN || direction === SwapOrderDirection.FROM_USERKEY
+      toChain =
+        direction === SwapOrderDirection.ON_CHAIN || direction === SwapOrderDirection.TO_USERKEY
 
       const amount = convertStandardToBase(BASE.coin, swapAmountFormValues.cryptoAmount)
 
       const quote = S.getQuote(yield select()).getOrFail('NO_SWAP_QUOTE')
-      const refundAddr = onChain ? yield call(selectReceiveAddress, BASE, networks) : undefined
+
+      const refundAddr = onChain
+        ? yield call(selectReceiveAddress, BASE, networks, api, coreSagas)
+        : undefined
       const destinationAddr = toChain
-        ? yield call(selectReceiveAddress, COUNTER, networks)
+        ? yield call(selectReceiveAddress, COUNTER, networks, api, coreSagas)
         : undefined
       const order: ReturnType<typeof api.createSwapOrder> = yield call(
         api.createSwapOrder,
         direction,
-        quote.quote.id,
+        quote.quoteId,
         amount,
         ccy,
         destinationAddr,
@@ -196,7 +233,39 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas; network
       const payment = paymentGetOrElse(BASE.coin, paymentR)
       if (onChain) {
         try {
-          yield call(buildAndPublishPayment, payment.coin, payment, order.kind.depositAddress)
+          const useAgentHotWalletAddress = selectors.core.walletOptions
+            .getUseAgentHotWalletAddress(yield select())
+            .getOrElse(true)
+
+          const hotWalletAddressWalletOptions = selectors.core.walletOptions
+            .getHotWalletAddresses(yield select(), Product.SWAP)
+            .getOrElse(null)
+
+          const paymentAccount: ReturnType<typeof api.getPaymentAccount> = yield call(
+            api.getPaymentAccount,
+            BASE.coin
+          )
+
+          // we are using a wallet address for the hot wallet from the API
+          const hotWalletAddress = useAgentHotWalletAddress
+            ? paymentAccount.agent.address
+            : hotWalletAddressWalletOptions
+
+          if (typeof hotWalletAddress !== 'string') {
+            console.error(
+              'Unable to retreive hotwallet address; falling back to deposit and sweep.'
+            )
+            yield call(buildAndPublishPayment, payment.coin, payment, order.kind.depositAddress)
+          } else {
+            yield call(
+              buildAndPublishPayment,
+              payment.coin,
+              payment,
+              order.kind.depositAddress,
+              hotWalletAddress
+            )
+          }
+
           yield call(api.updateSwapOrder, order.id, 'DEPOSIT_SENT')
         } catch (e) {
           yield call(api.updateSwapOrder, order.id, 'CANCEL')
@@ -216,8 +285,12 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas; network
       )
       yield put(actions.custodial.fetchRecentSwapTxs())
     } catch (e) {
-      const error = errorHandler(e)
-      yield put(actions.form.stopSubmit('previewSwap', { _error: error }))
+      if (isNabuError(e)) {
+        yield put(actions.form.stopSubmit('previewSwap', { _error: e }))
+      } else {
+        const error = errorHandler(e)
+        yield put(actions.form.stopSubmit('previewSwap', { _error: error }))
+      }
     }
   }
 
@@ -260,55 +333,93 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas; network
     }
   }
 
-  // 👋
-  // Eventually there won't be much difference between a swap, buy, or sell.
-  // We have 2 different directories (swap/buySell) of sagas/actions/types
-  // but on the BE there won't be any difference, just on the FE (if product)
-  // decides to keep things that way. In my opinion there is no difference
-  // but for now I'm copying a lot of the code from here and putting it in
-  // buySell.
-  //
-  // As of this writing, buySell only fetches one quote and doesn't need
-  // to worry about expiration, but since we're now using swap 2.0 for sell
-  // (and eventually buy) we'll need to worry about expiration and polling.
-  //
-  // We can't just call the swap fetchQuote function from buySell, because
-  // setting the swap quote loading will set the buy/sell quote loading,
-  // which we might not want. This is a case of breakdown between product/design/development.
-
-  const fetchQuote = function* () {
+  const fetchQuote = function* ({ payload }: ReturnType<typeof A.startPollQuote>) {
     while (true) {
       try {
+        const { amount, base, counter } = payload
         yield put(A.fetchQuoteLoading())
-        const initSwapFormValues = selectors.form.getFormValues('initSwap')(
-          yield select()
-        ) as InitSwapFormValuesType
-        if (!initSwapFormValues || !initSwapFormValues.BASE || !initSwapFormValues.COUNTER) {
-          return yield put(A.setStep({ step: 'INIT_SWAP' }))
-        }
 
-        const { BASE, COUNTER } = initSwapFormValues
+        const pair = getPair(base, counter)
+        const profile = getProfile(base, counter)
+        const paymentMethod = getPaymentMethod(profile)
 
-        const pair = getPair(BASE, COUNTER)
-        const direction = getDirection(BASE, COUNTER)
         const quote: ReturnType<typeof api.getSwapQuote> = yield call(
           api.getSwapQuote,
           pair,
-          direction
+          profile,
+          amount,
+          paymentMethod
         )
-        const rate = getRate(
-          quote.quote.priceTiers,
-          COUNTER.coin,
-          new BigNumber(convertStandardToBase(BASE.coin, 1))
+
+        const refreshConfig = getQuoteRefreshConfig({
+          currentDate: new Date(),
+          expireDate: new Date(quote.quoteExpiresAt)
+        })
+
+        yield put(
+          A.fetchQuoteSuccess({
+            ...quote,
+            price: convertBaseToStandard(counter.coin, quote.price),
+            refreshConfig,
+            resultAmount: convertBaseToStandard(counter.coin, quote.resultAmount)
+          })
         )
-        yield put(A.fetchQuoteSuccess({ quote, rate }))
-        const refresh = -moment().diff(quote.expiresAt)
+        const refresh = Math.abs(
+          differenceInMilliseconds(new Date(), new Date(quote.quoteExpiresAt))
+        )
         yield delay(refresh)
       } catch (e) {
-        const error = errorHandler(e)
-        yield put(A.fetchQuoteFailure(error))
+        yield put(A.fetchQuoteFailure(isNabuError(e) ? e : errorHandler(e)))
+        yield put(A.stopPollQuote())
+      }
+    }
+  }
+
+  const fetchQuotePrice = function* ({ payload }: ReturnType<typeof A.startPollQuotePrice>) {
+    const shouldDebounce = !Remote.NotAsked.is(yield select(S.getQuotePrice))
+
+    if (shouldDebounce) {
+      yield delay(300)
+    }
+
+    while (true) {
+      try {
+        const { amount, base, counter } = payload
+        const isValidAmount = isValidInputAmount(amount)
+        const amountOrDefault = isValidAmount ? amount : '0'
+        yield put(A.fetchQuotePriceLoading())
+
+        const pair = getPair(base, counter)
+        const profile = getProfile(base, counter)
+        const paymentMethod = getPaymentMethod(profile)
+
+        const quotePrice: ReturnType<typeof api.getSwapQuotePrice> = yield call(
+          api.getSwapQuotePrice,
+          pair,
+          amountOrDefault,
+          paymentMethod,
+          profile
+        )
+
+        yield put(
+          A.fetchQuotePriceSuccess({
+            data: {
+              networkFee: convertBaseToStandard(counter.coin, quotePrice.networkFee),
+              price: convertBaseToStandard(counter.coin, quotePrice.price),
+              resultAmount: convertBaseToStandard(counter.coin, quotePrice.resultAmount)
+            },
+            isPlaceholder: !isValidAmount
+          })
+        )
+
         yield delay(FALLBACK_DELAY)
-        yield put(A.startPollQuote())
+      } catch (e) {
+        yield put(A.fetchQuotePriceFailure(isNabuError(e) ? e : errorHandler(e)))
+        yield put(
+          A.stopPollQuotePrice({
+            shouldNotResetState: true
+          })
+        )
       }
     }
   }
@@ -331,9 +442,9 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas; network
     const initSwapFormValues = selectors.form.getFormValues('initSwap')(
       yield select()
     ) as InitSwapFormValuesType
-    if (!initSwapFormValues || !initSwapFormValues.BASE) return
+    if (!initSwapFormValues || !initSwapFormValues.BASE || !initSwapFormValues.COUNTER) return
 
-    const { BASE } = initSwapFormValues
+    const { BASE, COUNTER } = initSwapFormValues
     const paymentR = S.getPayment(yield select())
     const fix = S.getFix(yield select())
     const userCurrency = selectors.core.settings.getCurrency(yield select()).getOrElse('USD')
@@ -342,7 +453,7 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas; network
       .getOrFail('Failed to get rates')
 
     const amountFieldValue =
-      fix === 'CRYPTO'
+      fix === Coin.CRYPTO
         ? action.payload
         : Exchange.convertFiatToCoin({
             coin: BASE.coin,
@@ -351,6 +462,9 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas; network
             value: action.payload
           })
     yield put(actions.form.change('swapAmount', 'cryptoAmount', amountFieldValue))
+
+    const amount = convertStandardToBase(BASE.coin, amountFieldValue)
+    yield put(A.startPollQuotePrice({ amount, base: BASE, counter: COUNTER }))
 
     if (BASE.type === SwapBaseCounterTypes.CUSTODIAL) return
 
@@ -374,43 +488,36 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas; network
   }
 
   const initAmountForm = function* () {
-    let payment: PaymentValue
-    try {
-      yield put(A.startPollQuote())
-      yield put(A.fetchLimits())
-      yield put(A.updatePaymentLoading())
-      const initSwapFormValues = selectors.form.getFormValues('initSwap')(
-        yield select()
-      ) as InitSwapFormValuesType
-      if (!initSwapFormValues || !initSwapFormValues.BASE) {
-        return yield put(A.setStep({ step: 'INIT_SWAP' }))
-      }
+    yield put(A.fetchLimits())
+    yield put(A.updatePaymentLoading())
+    const initSwapFormValues = selectors.form.getFormValues('initSwap')(
+      yield select()
+    ) as InitSwapFormValuesType
+    if (!initSwapFormValues || !initSwapFormValues.BASE || !initSwapFormValues.COUNTER) {
+      return yield put(A.setStep({ step: 'INIT_SWAP' }))
+    }
 
-      const swapAmountFormValues = selectors.form.getFormValues('swapAmount')(
-        yield select()
-      ) as SwapAmountFormValues
+    const swapAmountFormValues = selectors.form.getFormValues('swapAmount')(
+      yield select()
+    ) as SwapAmountFormValues
 
-      yield race({
-        failure: take(A.fetchQuoteFailure.type),
-        success: take(A.fetchQuoteSuccess.type)
-      })
-      const quote = S.getQuote(yield select()).getOrFail(NO_QUOTE)
+    const { BASE, COUNTER } = initSwapFormValues
+    const amount = swapAmountFormValues
+      ? convertStandardToBase(BASE.coin, swapAmountFormValues.cryptoAmount)
+      : undefined
 
-      const { BASE } = initSwapFormValues
-      if (BASE.type === SwapBaseCounterTypes.ACCOUNT) {
-        payment = yield call(
-          calculateProvisionalPayment,
-          BASE,
-          quote.quote,
-          swapAmountFormValues?.cryptoAmount || 0
-        )
-        yield put(A.updatePaymentSuccess(payment))
-      } else {
-        yield put(A.updatePaymentSuccess(undefined))
-      }
-    } catch (e) {
-      const error = errorHandler(e)
-      yield put(A.updatePaymentFailure(error))
+    yield put(A.stopPollQuotePrice({}))
+    yield put(A.startPollQuotePrice({ amount, base: BASE, counter: COUNTER }))
+
+    if (BASE.type === SwapBaseCounterTypes.ACCOUNT) {
+      const payment = yield call(
+        calculateProvisionalPayment,
+        BASE,
+        swapAmountFormValues?.cryptoAmount || 0
+      )
+      yield put(A.updatePaymentSuccess(payment))
+    } else {
+      yield put(A.updatePaymentSuccess(undefined))
     }
   }
 
@@ -438,15 +545,94 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas; network
 
   const showModal = function* ({ payload }: ReturnType<typeof A.showModal>) {
     const { baseCurrency, counterCurrency, origin } = payload
+    // Verify identity before deposit if TIER 2
+    const completedKYC = yield call(getExtraKYCCompletedStatus, {
+      api,
+      context: ExtraKYCContext.TRADING,
+      origin: 'Swap' as VerifyIdentityOriginType
+    })
+
+    // If KYC was closed before answering, return
+    if (!completedKYC) {
+      return
+    }
+
+    const latestPendingOrder = S.getLatestPendingSwapTrade(yield select())
+
+    // get current user tier
+    const isUserTier2 = yield call(isTier2)
+
+    yield put(actions.custodial.fetchProductEligibilityForUser())
+    yield take([
+      custodialActions.fetchProductEligibilityForUserSuccess.type,
+      custodialActions.fetchProductEligibilityForUserFailure.type
+    ])
+
+    const products = selectors.custodial.getProductEligibilityForUser(yield select()).getOrElse({
+      swap: { enabled: false, maxOrdersLeft: 0 }
+    } as ProductEligibilityForUser)
+
+    // check is user eligible to do sell/buy
+    // we skip this for gold users
+    if (!isUserTier2 && !latestPendingOrder) {
+      // in case that there are no maxOrdersLeft user can swap freely
+      const userCanSwapMore = !products.swap?.maxOrdersLeft || products.swap?.maxOrdersLeft > 0
+      // prompt upgrade modal in case that user can't buy more
+      if (!userCanSwapMore) {
+        yield put(
+          actions.modals.showModal(ModalName.UPGRADE_NOW_SILVER_MODAL, {
+            origin: 'BuySellInit'
+          })
+        )
+        return
+      }
+    }
+
+    // show sanctions for swap
+    if (products?.swap?.reasonNotEligible) {
+      // tier 2 required
+      if (products.swap.reasonNotEligible.reason === 'TIER_2_REQUIRED') {
+        yield put(
+          actions.modals.showModal(ModalName.UPGRADE_NOW_SILVER_MODAL, {
+            origin: 'BuySellInit'
+          })
+        )
+        return
+      }
+
+      if (products.swap.reasonNotEligible.reason === 'NOT_ELIGIBLE') {
+        const steps = yield* typedCall(api.fetchVerificationSteps)
+        if (steps !== '' && steps.items[steps.items.length - 1].status === 'DISABLED') {
+          yield put(
+            actions.modals.showModal(ModalName.COMPLETE_USER_PROFILE, { origin: 'BuySellInit' })
+          )
+
+          return
+        }
+      }
+
+      const message =
+        products.swap.reasonNotEligible.reason !== CustodialSanctionsEnum.EU_5_SANCTION
+          ? products.swap.reasonNotEligible.message
+          : undefined
+      const sanctionsType = products.swap.reasonNotEligible.type
+      yield put(
+        actions.modals.showModal(ModalName.SANCTIONS_INFO_MODAL, {
+          message,
+          origin: 'Swap',
+          sanctionsType
+        })
+      )
+      return
+    }
+
     yield put(
-      actions.modals.showModal('SWAP_MODAL', {
+      actions.modals.showModal(ModalName.SWAP_MODAL, {
         baseCurrency,
         counterCurrency,
         origin
       })
     )
-
-    const latestPendingOrder = S.getLatestPendingSwapTrade(yield select())
 
     if (latestPendingOrder) {
       yield put(
@@ -537,6 +723,7 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas; network
     fetchLimits,
     fetchPairs,
     fetchQuote,
+    fetchQuotePrice,
     fetchTrades,
     formChanged,
     handleSwapMaxAmountClick,

@@ -1,95 +1,110 @@
 import { RemoteDataType } from '@core/types'
-import { actions } from 'data'
 
-export type AuthStateType = {
-  auth_type: number
-  authorizeVerifyDevice: RemoteDataType<any, any>
-  firstLogin: boolean
-  isAuthenticated: boolean
-  isLoggingIn: boolean
-  kycReset: undefined
-  login: RemoteDataType<any, any>
-  magicLinkData: null
-  magicLinkDataEncoded?: string
-  manifestFile: null
-  metadataRestore: RemoteDataType<any, any>
-  mobileLoginStarted: boolean
-  registerEmail?: string
-  registering: RemoteDataType<any, any>
-  resetAccount: boolean
-  restoring: RemoteDataType<any, any>
-  secureChannelLogin: RemoteDataType<any, any>
-  userGeoData: RemoteDataType<any, any>
+export enum ExchangeErrorCodes {
+  EMAIL_NOT_VERIFIED = 65,
+  WRONG_2FA = 10, // Incorrect 2FA code
+  MISSING_2FA = 11, // 2FA is undefined/missing from params
+  NOT_LINKED = 12,
+  UNRECOGNIZED_DEVICE = 99,
+  INVALID_CREDENTIALS = 8,
+  NOT_ACCEPTABLE = 165 // Sanctions
+}
+export enum ProductAuthOptions {
+  EXCHANGE = 'EXCHANGE',
+  EXPLORER = 'EXPLORER',
+  WALLET = 'WALLET'
+}
+
+export enum AccountUnificationFlows {
+  EXCHANGE_MERGE = 'EXCHANGE_MERGE',
+  EXCHANGE_UPGRADE = 'EXCHANGE_UPGRADE',
+  MOBILE_EXCHANGE_MERGE = 'MOBILE_EXCHANGE_MERGE',
+  MOBILE_EXCHANGE_UPGRADE = 'MOBILE_EXCHANGE_UPGRADE',
+  MOBILE_WALLET_MERGE = 'MOBILE_WALLET_MERGE',
+  UNIFIED = 'UNIFIED',
+  WALLET_MERGE = 'WALLET_MERGE'
 }
 
 export enum LoginSteps {
   CHECK_EMAIL = 'CHECK_EMAIL',
   ENTER_EMAIL_GUID = 'ENTER_EMAIL_GUID',
-  ENTER_PASSWORD = 'ENTER_PASSWORD',
+  ENTER_PASSWORD_EXCHANGE = 'ENTER_PASSWORD_EXCHANGE',
+  ENTER_PASSWORD_WALLET = 'ENTER_PASSWORD_WALLET',
+  INSTITUTIONAL_PORTAL = 'INSTITUTIONAL_PORTAL',
   LOADING = 'LOADING',
+  SOFI_EMAIL = 'SOFI_EMAIL',
+  SOFI_SUCCESS = 'SOFI_SUCCESS',
+  SOFI_VERIFY_ID = 'SOFI_VERIFY_ID',
+  TWO_FA_EXCHANGE = 'TWO_FA_EXCHANGE',
+  TWO_FA_WALLET = 'TWO_FA_WALLET',
   VERIFY_MAGIC_LINK = 'VERIFY_MAGIC_LINK'
 }
 
-export enum RecoverSteps {
-  CLOUD_RECOVERY = 'CLOUD_RECOVERY',
-  RECOVERY_OPTIONS = 'RECOVERY_OPTIONS',
-  RECOVERY_PHRASE = 'RECOVERY_PHRASE',
-  RESET_ACCOUNT = 'RESET_ACCOUNT',
-  RESET_PASSWORD = 'RESET_PASSWORD'
+export enum MergeSteps {}
+
+export enum PlatformTypes {
+  ANDROID = 'ANDROID',
+  IOS = 'IOS',
+  WEB = 'WEB'
 }
 
-export type RecoverFormType = {
-  password: string
-  step: RecoverSteps
+export type LoginRoutinePayloadType = {
+  country?: string
+  email?: string
+  firstLogin?: boolean
+  recovery?: boolean
+  state?: string
 }
 
-export type LoginPayloadType = {
-  code: string
-  guid: string
-  mobileLogin: boolean
-  password: string
-  sharedKey: string
+export type ExchangeLoginType = {
+  code?: string
+  password?: string
+  username: string
 }
 
 export type LoginFormType = {
-  email: string
+  code?: string
+  email?: string
   emailToken?: string
-  guid: string
-  guidOrEmail: string
-  password: string
-  step: LoginSteps
+  exchangeEmail?: string
+  exchangePassword?: string
+  exchangeTwoFA?: string
+  exchangeUnifiedGuid?: string
+  guid?: string
+  guidOrEmail?: string
+  password?: string
+  sofiLoginEmail?: string
+  sofiLoginSSN?: string
+  step?: LoginSteps
   twoFA?: number | string
+  upgradePassword?: string
 }
 
-export type AuthorzieDeviceMismatchData = {
-  approver?: {
-    browser: string
-    country_code: string
-    ip_address: string
-  }
-  confirmation_required?: boolean
-  requester?: {
-    browser: string
-    country_code: string
-    ip_address: string
-  }
-  success: boolean
+export enum AuthUserType {
+  INSTITUTIONAL = 'INSTITUTIONAL'
 }
-export type WalletDataFromMagicLink = {
+
+export type AuthMagicLink = {
   exchange?: {
     email?: string
     twoFaMode?: boolean
     user_id?: string
   }
+  exchange_auth_url?: string
   mergeable?: boolean | null
+  platform_type: PlatformTypes
+  product?: ProductAuthOptions
+  session_id?: string
+  unified?: boolean
   upgradeable?: boolean | null
-  wallet: {
+  user_type?: AuthUserType
+  wallet?: {
     auth_type?: number
     email: string
     email_code?: string
     exchange?: {
       email?: string
-      twoFaMode?: boolean
+      two_fa_mode?: boolean
       user_id?: string
     }
     guid: string
@@ -102,11 +117,12 @@ export type WalletDataFromMagicLink = {
       recovery_token?: string
       user_id?: string
     }
-    session_id?: string
   }
 }
 
-export type LoginErrorType =
+export type LoginSuccessType = boolean
+export type LoginFailureType = string | boolean | undefined
+export type LoginApiErrorType =
   | {
       auth_type: number
       authorization_required: boolean
@@ -114,61 +130,99 @@ export type LoginErrorType =
       message?: string
     }
   | string
-// actions
 
-interface LoginFailureActionType {
-  payload: {
-    err?: string
+// TODO: define missing types and determine if all of these types are needed/used
+export type ExchangeLoginSuccessType = {}
+export type ExchangeLoginFailureType = any
+export type ExchangeResetPasswordSuccessType = any
+
+export type ProductAuthMetadata = {
+  ipCountry?: string
+  platform?: PlatformTypes
+  product?: ProductAuthOptions
+  redirect?: string
+  sessionIdMobile?: string
+  userType?: AuthUserType
+}
+
+export type AuthStateType = {
+  accountUnificationFlow?: AccountUnificationFlows
+  auth_type: number
+  authorizeVerifyDevice: RemoteDataType<string, any> // TODO: type out auth device API response
+  exchangeAuth: {
+    exchangeAccountConflict?: boolean
+    exchangeAccountFailure?: boolean
+    exchangeLogin: RemoteDataType<ExchangeLoginFailureType, ExchangeLoginSuccessType>
+    exchangeLoginError?: ExchangeErrorCodes
+    jwtToken?: string
+    resetPassword?: RemoteDataType<null, string>
   }
-  type: typeof actions.auth.loginFailure.type
-}
-interface InitializeLoginSuccessActionType {
-  type: typeof actions.auth.initializeLoginSuccess.type
+  isAuthenticated: boolean
+  isLoggingIn: boolean
+  isSofi?: boolean
+  login: RemoteDataType<LoginFailureType, LoginSuccessType>
+  magicLinkData?: AuthMagicLink
+  magicLinkDataEncoded?: string
+  manifestFile: null
+  mobileLoginStarted: boolean
+  productAuthMetadata: ProductAuthMetadata
+  registerEmail?: string
+  resetAccount: boolean
+  secureChannelLogin: RemoteDataType<string, undefined>
 }
 
-interface InitializeLoginLoadingActionType {
-  type: typeof actions.auth.initializeLoginLoading.type
+export type MagicLinkRequestPayloadType = {
+  email: string
 }
 
-interface InitializeLoginFailureActionType {
-  type: typeof actions.auth.initializeLoginFailure.type
+export type LoginPayloadType = {
+  code?: string
+  guid: string
+  mobileLogin: boolean | null
+  password: string
+  sharedKey: string | null
 }
 
-interface LoginRouteSagaActionType {
-  payload: {
-    email?: string
-    firstLogin?: boolean
-    mobileLogin?: boolean
+//
+// mobile message types
+//
+export type MobileAuthConnectedMessage = {
+  status: 'connected'
+}
+
+export type MobileAuthWalletMergeMessage = {
+  data?: {
+    guid: string
+    password: string
+    sessionId: string
   }
-  type: typeof actions.auth.loginRoutine.type
+  error?: string
+  status: 'error' | 'success'
 }
 
-interface TriggerWalletMagicLinkSuccessActionType {
-  type: typeof actions.auth.triggerWalletMagicLinkSuccess.type
-}
-
-interface TriggerWalletMagicLinkLoadingActionType {
-  type: typeof actions.auth.triggerWalletMagicLinkLoading.type
-}
-
-interface TriggerWalletMagicLinkFailureActionType {
-  type: typeof actions.auth.triggerWalletMagicLinkFailure
-}
-
-interface SetMagicLinkInfoActionType {
-  payload: {
-    magicLinkInfo: WalletDataFromMagicLink
+export type MobileAuthExchangeMessage = {
+  data?: {
+    csrf: string
+    jwt: string
+    jwtExpirationTime: number
   }
-  type: typeof actions.auth.setMagicLinkInfo.type
+  error?: string
+  status: 'error' | 'success'
 }
 
-export type AuthActionTypes =
-  | LoginFailureActionType
-  | LoginRouteSagaActionType
-  | InitializeLoginFailureActionType
-  | InitializeLoginLoadingActionType
-  | InitializeLoginSuccessActionType
-  | SetMagicLinkInfoActionType
-  | TriggerWalletMagicLinkFailureActionType
-  | TriggerWalletMagicLinkLoadingActionType
-  | TriggerWalletMagicLinkSuccessActionType
+export type MobileAuthLoginMessage = {
+  data?: {
+    action: 'login'
+  }
+}
+
+export type MobileMessageTypes =
+  | MobileAuthConnectedMessage
+  | MobileAuthWalletMergeMessage
+  | MobileAuthExchangeMessage
+  | MobileAuthLoginMessage
+
+export type MobileAuthLoginPayloadType = {
+  message?: MobileMessageTypes
+  platform: PlatformTypes
+}

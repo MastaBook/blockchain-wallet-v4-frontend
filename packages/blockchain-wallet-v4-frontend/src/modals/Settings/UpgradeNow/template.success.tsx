@@ -6,7 +6,9 @@ import styled, { css } from 'styled-components'
 import { Button, Image, Link, Text } from 'blockchain-info-components'
 import { BlueCartridge } from 'components/Cartridge'
 import { FlyoutWrapper } from 'components/Flyout'
+import { ModalName } from 'data/types'
 
+import { IconsContainer, Title } from '../../components'
 import { TIER_TYPES } from '../TradingLimits/model'
 import { Props as OwnProps, SuccessStateType } from '.'
 
@@ -16,18 +18,7 @@ const Wrapper = styled.div`
   display: flex;
   flex-direction: column;
 `
-const Title = styled(Text)`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 7px;
-`
-const IconsContainer = styled.div`
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  width: 100%;
-`
+
 const HeaderWrapper = styled(FlyoutWrapper)`
   position: fixed;
   max-width: 480px;
@@ -85,16 +76,18 @@ const UpgradeDescription = styled(Text)`
 type Props = OwnProps & SuccessStateType
 
 const Template: React.FC<Props> = (props) => {
-  const { identityVerificationActions, interestEDDStatus, sddEligible, userData, userTiers } = props
+  const { earnEDDStatus, identityVerificationActions, modalActions, userData, userTiers } = props
   const startVerification = useCallback(
     (tier: TIER_TYPES) => () => {
+      modalActions.closeModal(ModalName.TRADING_LIMITS_MODAL)
+      modalActions.closeModal(ModalName.UPGRADE_NOW_MODAL)
       identityVerificationActions.verifyIdentity({
         needMoreInfo: false,
         origin: 'Settings',
         tier
       })
     },
-    [identityVerificationActions]
+    [identityVerificationActions, modalActions]
   )
   if (!Array.isArray(userTiers)) {
     return null
@@ -103,15 +96,9 @@ const Template: React.FC<Props> = (props) => {
   const goldTier = userTiers.find((userTier) => userTier.index === TIER_TYPES.GOLD)
 
   const userCurrentTier = (path(['tiers', 'current'], userData) as number) ?? 0
-  const sddCheckTier =
-    sddEligible && sddEligible.tier === TIER_TYPES.SILVER_PLUS
-      ? TIER_TYPES.SILVER_PLUS
-      : userCurrentTier
-  const currentTier: number | undefined =
-    userCurrentTier === TIER_TYPES.NONE ? userCurrentTier : sddCheckTier
   const isUserTierZero = userCurrentTier === TIER_TYPES.NONE
   const isUserTierSilver =
-    currentTier === TIER_TYPES.SILVER || currentTier === TIER_TYPES.SILVER_PLUS
+    userCurrentTier === TIER_TYPES.SILVER || userCurrentTier === TIER_TYPES.SILVER_PLUS
 
   const isGoldInReview = goldTier.state === 'under_review' || goldTier.state === 'pending'
 
@@ -123,7 +110,7 @@ const Template: React.FC<Props> = (props) => {
             <Image width='26px' name='arrow-left' />
           </Link>
         </IconsContainer>
-        <Title color='textBlack' size='24px' weight={600} style={{ marginTop: '18px' }}>
+        <Title color='textBlack' style={{ marginTop: '18px' }}>
           <FormattedMessage id='scenes.interest.verifyid' defaultMessage='Upgrade Now' />
         </Title>
         <Text
@@ -145,8 +132,8 @@ const Template: React.FC<Props> = (props) => {
             <Image name='blockchain-gold' size='20px' />
             <TierTitle>
               <FormattedMessage
-                id='modals.tradinglimits.upgrade.gold_limits'
-                defaultMessage='Gold Limits'
+                id='modals.tradinglimits.upgrade.full_access_limits'
+                defaultMessage='Full Access Limits'
               />
             </TierTitle>
             <UpgradeSubtitle>
@@ -158,7 +145,7 @@ const Template: React.FC<Props> = (props) => {
             <UpgradeDescription>
               <FormattedMessage
                 id='modals.upgradenow.gold_details'
-                defaultMessage='Connect your bank or card to your Wallet. Hold cash in your wallet. Earn crypto with Rewards.'
+                defaultMessage='Connect your bank or card to your Blockchain.com Account. Hold cash in your wallet. Earn crypto with Rewards.'
               />
               {` `}
               <span>
@@ -168,7 +155,7 @@ const Template: React.FC<Props> = (props) => {
                 />
               </span>
             </UpgradeDescription>
-            {interestEDDStatus?.eddSubmitted || isGoldInReview ? (
+            {earnEDDStatus?.eddSubmitted || isGoldInReview ? (
               <StatusCartridge>
                 <BlueCartridge fontSize='12px'>
                   <FormattedMessage
@@ -188,8 +175,8 @@ const Template: React.FC<Props> = (props) => {
                 onClick={startVerification(TIER_TYPES.GOLD)}
               >
                 <FormattedMessage
-                  id='modals.upgradenow.unlock_gold_limits'
-                  defaultMessage='Unlock Gold Limits'
+                  id='modals.upgradenow.unlock_full_access_limits'
+                  defaultMessage='Unlock Full Access'
                 />
               </Button>
             )}
@@ -200,8 +187,8 @@ const Template: React.FC<Props> = (props) => {
           <Image name='blockchain-silver' size='20px' />
           <TierTitle>
             <FormattedMessage
-              id='modals.tradinglimits.upgrade.silver_limits'
-              defaultMessage='Silver Limits'
+              id='modals.tradinglimits.upgrade.limited_access_limits'
+              defaultMessage='Limited Access Limits'
             />
           </TierTitle>
           <UpgradeSubtitle>

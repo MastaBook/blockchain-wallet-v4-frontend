@@ -1,8 +1,8 @@
 import React from 'react'
 import { FormattedMessage } from 'react-intl'
-import { BigNumber } from 'bignumber.js'
 import styled from 'styled-components'
 
+import { displayCoinToCoin } from '@core/exchange'
 import { Button, Link, Text } from 'blockchain-info-components'
 import {
   BlueCartridge,
@@ -46,7 +46,7 @@ export const StxHeader = ({ stxCampaign }: { stxCampaign: CampaignInfoType }) =>
   switch (stxCampaign.userCampaignState) {
     case 'TASK_FINISHED':
     case 'REWARD_RECEIVED':
-      return <span>STX Private Key Wallet</span>
+      return <span>STX DeFi Wallet</span>
     default:
       return <FormattedMessage id='scenes.airdrops.stx' defaultMessage='Blockstack' />
   }
@@ -103,7 +103,7 @@ const calcStxAmount = (stxCampaign) => {
     stxCampaign.userCampaignTransactionResponseList.length &&
     stxCampaign.userCampaignTransactionResponseList[0].withdrawalQuantity
   if (!stxAmount) return
-  return new BigNumber(stxAmount).dividedBy(10000000).toString().concat(' STX')
+  return displayCoinToCoin({ coin: 'STX', value: stxAmount })
 }
 
 export const StxDateOrAmount = ({ stxCampaign }: { stxCampaign: CampaignInfoType }) => {
@@ -117,7 +117,7 @@ export const StxDateOrAmount = ({ stxCampaign }: { stxCampaign: CampaignInfoType
             {calcStxAmount(stxCampaign)}
           </Text>
           <Text size='12px' color='grey600' weight={500}>
-            STX Private Key Wallet
+            STX DeFi Wallet
           </Text>
         </DateOrAmount>
       )
@@ -185,7 +185,9 @@ export const StxStatus = ({
 
             return (
               <BlueCartridgeCTA
-                onClick={() => identityVerificationActions.claimCampaignClicked('BLOCKSTACK')}
+                onClick={() =>
+                  identityVerificationActions.claimCampaignClicked({ campaign: 'BLOCKSTACK' })
+                }
               >
                 <FormattedMessage id='scenes.airdrop.stx.claim' defaultMessage='Claim' />
               </BlueCartridgeCTA>
@@ -230,27 +232,6 @@ export const StxFooterCta = ({ kycState, tags, userCampaignsInfoResponseList }: 
 
   if (stxCampaign) {
     switch (stxCampaign.userCampaignState) {
-      case 'REWARD_SENT':
-      case 'TASK_FINISHED':
-      case 'REWARD_RECEIVED':
-        return (
-          <Text size='12px' color='grey600' weight={500}>
-            <FormattedMessage
-              id='scenes.airdrop.stx.wallet.balance'
-              defaultMessage='Please note the balance is currently non-transferable. Learn more about this and future wallet support for STX'
-            />{' '}
-            <Link
-              href='https://support.blockchain.com/hc/en-us/articles/360038745191'
-              target='_blank'
-              size='12px'
-              weight={500}
-              style={{ textDecoration: 'underline' }}
-            >
-              <FormattedMessage id='copy.here' defaultMessage='here' />
-            </Link>
-            .
-          </Text>
-        )
       case 'FAILED':
         return (
           <Link href='https://support.blockchain.com' target='_blank' rel='noopener noreferrer'>
@@ -262,6 +243,9 @@ export const StxFooterCta = ({ kycState, tags, userCampaignsInfoResponseList }: 
       case undefined:
       case 'REGISTERED':
       case 'NONE':
+      case 'REWARD_SENT':
+      case 'TASK_FINISHED':
+      case 'REWARD_RECEIVED':
       default:
         return null
     }

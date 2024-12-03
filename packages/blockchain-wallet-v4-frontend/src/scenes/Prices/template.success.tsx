@@ -1,12 +1,17 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { FormattedMessage } from 'react-intl'
+import { useSelector } from 'react-redux'
 import { useGlobalFilter, useSortBy, useTable } from 'react-table'
-import AutoSizer from 'react-virtualized-auto-sizer'
-import { FixedSizeList as List } from 'react-window'
+import { formValueSelector } from 'redux-form'
 import styled from 'styled-components'
 
+import { getCurrency } from '@core/redux/settings/selectors'
+import { getCoinViewV2 } from '@core/redux/walletOptions/selectors'
+import { CellText, HeaderText, HeaderToggle, TableWrapper } from 'components/Table'
+import { getData as getUserCountry } from 'components/Banner/selectors'
+
 import { Props as _P, SuccessStateType as _S } from '.'
-import { CellText, getTableColumns, HeaderText, TableWrapper } from './Table'
+import { getTableColumns } from './Table'
 
 const NoResultsWrapper = styled.div`
   display: flex;
@@ -15,40 +20,43 @@ const NoResultsWrapper = styled.div`
   margin-top: 120px;
 `
 
-const TableBodyWrapper = styled.div`
-  height: calc(100% - 52px);
+export const TableBodyWrapper = styled.div`
+  height: 100%;
+  flex: 1 1 auto;
+  overflow: hidden;
 `
 
-const options = {
-  disableMultiSort: true,
-  disableSortRemove: true
-}
-
-const initialState = {
-  sortBy: [{ desc: true, id: 'price' }]
-}
-
 const PricesTable = (props: Props) => {
+  const isCoinViewV2Enabled = useSelector(getCoinViewV2).getOrElse(false) as boolean
+  const isUserFromUK = useSelector(getUserCountry)?.country === 'GB'
+  const isIpFromUK = useSelector(getUserCountry)?.ipCountry === 'GB'
+  const textFilter = useSelector((state) => formValueSelector('prices')(state, 'textFilter'))
+  const walletCurrency = useSelector(getCurrency).getOrElse('USD')
+  const isUkUser = isUserFromUK || isIpFromUK
+  
   const {
+    analyticsActions,
     buySellActions,
     data,
     formActions,
     modalActions,
     routerActions,
-    swapActions,
-    walletCurrency
+    swapActions
   } = props
 
-  const columns = React.useMemo(
+  const columns = useMemo(
     getTableColumns({
+      analyticsActions,
       buySellActions,
       formActions,
+      isCoinViewV2Enabled,
+      isUkUser,
       modalActions,
       routerActions,
       swapActions,
       walletCurrency
     }),
-    []
+    [isCoinViewV2Enabled]
   )
 
   const {
@@ -58,48 +66,30 @@ const PricesTable = (props: Props) => {
     prepareRow,
     rows,
     setGlobalFilter,
-    state
+    state: { globalFilter }
   } = useTable(
     {
       columns,
       data,
-      initialState,
-      ...options
+      disableMultiSort: true
     },
     useGlobalFilter,
     useSortBy
   )
+
   // if the table's filter state and redux form textFilter input dont match
   // update so they do, allowing text filtering to work
-  if (state.globalFilter !== props.textFilter) {
-    setGlobalFilter(props.textFilter)
+  if (globalFilter !== textFilter) {
+    setGlobalFilter(textFilter)
   }
 
   // limit no match found length to something reasonable
   const filterMatchText =
-    (state.globalFilter?.length > 20 && `${state.globalFilter.substring(0, 20)}…`) ||
-    state.globalFilter
-
-  const RenderRow = React.useCallback(
-    ({ index, style }) => {
-      const row = rows[index]
-      prepareRow(row)
-      return (
-        <div key={`row-${row.id}`} {...row.getRowProps({ style })} className='tr'>
-          {row.cells.map((cell) => (
-            <div key={`cell-${cell.row.id}`} {...cell.getCellProps()} className='td'>
-              {cell.render('Cell')}
-            </div>
-          ))}
-        </div>
-      )
-    },
-    [prepareRow, rows]
-  )
+    globalFilter?.length > 20 ? `${globalFilter.substring(0, 20)}…` : globalFilter
 
   return (
-    <TableWrapper>
-      {state.globalFilter?.length && !rows.length ? (
+    <TableWrapper cellWidth='16%' minCellWidth='150px' height='calc(100% - 97px)'>
+      {globalFilter?.length && !rows.length ? (
         <NoResultsWrapper>
           <CellText color='grey900' size='18px'>
             <span role='img' aria-label='detective emoji'>
@@ -115,47 +105,50 @@ const PricesTable = (props: Props) => {
         </NoResultsWrapper>
       ) : (
         <div {...getTableProps()} className='table'>
-          <div>
-            {headerGroups.map((headerGroup) => (
-              // eslint-disable-next-line react/jsx-key
-              <div {...headerGroup.getHeaderGroupProps()} className='tr'>
-                {headerGroup.headers.map((column) => (
-                  <div
-                    key={column.key}
-                    {...column.getHeaderProps(column.getSortByToggleProps())}
-                    className='th'
-                  >
-                    <HeaderText>
-                      {column.render('Header')}
-                      <div>
-                        {column.isSorted ? (
-                          column.isSortedDesc ? (
-                            <span>▾</span>
+          <div className='thead'>
+            {headerGroups.map((headerGroup, i) => {
+              const key = headerGroup.headers[i].id
+              return (
+                <div key={key} {...headerGroup.getHeaderGroupProps()} className='tr'>
+                  {headerGroup.headers.map((column) => (
+                    <div
+                      key={column.key}
+                      {...column.getHeaderProps(column.getSortByToggleProps())}
+                      className='th'
+                    >
+                      <HeaderText>
+                        {column.render('Header')}
+                        <div>
+                          {column.isSorted ? (
+                            column.isSortedDesc ? (
+                              <HeaderToggle>▾</HeaderToggle>
+                            ) : (
+                              <HeaderToggle>▴</HeaderToggle>
+                            )
                           ) : (
-                            <span>▴</span>
-                          )
-                        ) : (
-                          ''
-                        )}
-                      </div>
-                    </HeaderText>
-                  </div>
-                ))}
-              </div>
-            ))}
+                            ''
+                          )}
+                        </div>
+                      </HeaderText>
+                    </div>
+                  ))}
+                </div>
+              )
+            })}
           </div>
-          <TableBodyWrapper>
-            <AutoSizer>
-              {({ height, width }) => {
-                return (
-                  <div {...getTableBodyProps()}>
-                    <List height={height} width={width} itemCount={rows.length} itemSize={90}>
-                      {RenderRow}
-                    </List>
-                  </div>
-                )
-              }}
-            </AutoSizer>
+          <TableBodyWrapper {...getTableBodyProps()} className='tbody'>
+            {rows.map((row) => {
+              prepareRow(row)
+              return (
+                <div key={`row-${row.id}`} {...row.getRowProps()} className='tr'>
+                  {row.cells.map((cell) => (
+                    <div key={`cell-${cell.row.id}`} {...cell.getCellProps()} className='td'>
+                      {cell.render('Cell')}
+                    </div>
+                  ))}
+                </div>
+              )
+            })}
           </TableBodyWrapper>
         </div>
       )}
@@ -164,4 +157,5 @@ const PricesTable = (props: Props) => {
 }
 
 type Props = _P & { data: _S }
+
 export default PricesTable

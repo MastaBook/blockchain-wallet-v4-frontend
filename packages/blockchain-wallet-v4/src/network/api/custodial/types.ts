@@ -4,7 +4,7 @@ import {
   BSTransactionStateType,
   CoinType,
   FiatType,
-  WalletAcountType,
+  WalletAccountType,
   WalletCurrencyType,
   WalletFiatType
 } from '@core/types'
@@ -22,9 +22,15 @@ export type BeneficiaryType = {
 export type BeneficiariesType = Array<BeneficiaryType>
 
 export enum ProductTypes {
+  BROKERAGE = 'BROKERAGE',
+  DEPOSIT = 'DEPOSIT',
+  // Active Rewards
+  EARN_CC1W = 'EARN_CC1W',
   SAVINGS = 'SAVINGS',
   SIMPLEBUY = 'SIMPLEBUY',
-  SWAP = 'SWAP'
+  STAKING = 'STAKING',
+  SWAP = 'SWAP',
+  WALLET = 'WALLET'
 }
 
 export type NabuCustodialProductType = keyof typeof ProductTypes
@@ -73,9 +79,11 @@ export type WithdrawalLockResponseType = {
   totalLocked: WithdrawLockAmount
 }
 
+export type WithdrawAmount = { symbol: string; value: string }
+
 export type WithdrawResponseType = {
-  amount: { symbol: WalletFiatType; value: string }
-  fee?: { symbol: WalletFiatType; value: string }
+  amount: WithdrawAmount
+  fee?: { symbol: string; value: string }
   id: string
   product: NabuCustodialProductType
   state: 'NONE'
@@ -151,15 +159,15 @@ export type GetTransactionsHistoryType = {
   toValue?: string
 }
 
-export type CrossBorderLimitsPyload = {
+export type CrossBorderLimitsPayload = {
   currency?: WalletFiatType
-  fromAccount: WalletAcountType
+  fromAccount: WalletAccountType
   inputCurrency: CoinType
   outputCurrency: CoinType
-  toAccount: WalletAcountType
+  toAccount: WalletAccountType
 }
 
-type CrossBorderLimitItem = {
+export type CrossBorderLimitItem = {
   currency: FiatType
   value: string
 }
@@ -167,6 +175,12 @@ type CrossBorderLimitItem = {
 export type LimitWithEffective = {
   effective: boolean
   limit: CrossBorderLimitItem
+}
+
+export type CrossBorderLimitSuggestedItem = {
+  available: CrossBorderLimitItem
+  limit: CrossBorderLimitItem
+  used: CrossBorderLimitItem
 }
 
 export type CrossBorderLimits = {
@@ -179,22 +193,54 @@ export type CrossBorderLimits = {
   }
   suggestedUpgrade: {
     available: CrossBorderLimitItem
-    daily?: {
-      available: CrossBorderLimitItem
-      limit: CrossBorderLimitItem
-      used: CrossBorderLimitItem
-    }
-    monthly?: {
-      available: CrossBorderLimitItem
-      limit: CrossBorderLimitItem
-      used: CrossBorderLimitItem
-    }
+    daily?: CrossBorderLimitSuggestedItem
+    monthly?: CrossBorderLimitSuggestedItem
     requiredTier: number
     requirements: string[]
-    yearly?: {
-      available: CrossBorderLimitItem
-      limit: CrossBorderLimitItem
-      used: CrossBorderLimitItem
-    }
+    yearly?: CrossBorderLimitSuggestedItem
+  }
+}
+
+export type CustodialToNonCustodialWithdrawalFeesType = {
+  amount: string
+  currency: CoinType
+  fiatCurrency: FiatType
+  paymentMethod: 'BANK_TRANSFER' | 'EASY_TRANSFER' | 'CARD_PAYMENT' | 'CRYPTO_TRANSFER'
+}
+
+export type MaxCustodialWithdrawalFeeType = Omit<
+  CustodialToNonCustodialWithdrawalFeesType,
+  'amount'
+>
+
+export type CustodialToNonCustodialWithdrawalFeesAmountType = {
+  currency: CoinType
+  value: string
+}
+
+export type CustodialToNonCustodialWithdrawalFeesFiatAmountType = {
+  currency: FiatType
+  value: string
+}
+
+export type CustodialToNonCustodialWithdrawalFeeType = {
+  amount: CustodialToNonCustodialWithdrawalFeesAmountType
+  fiat: CustodialToNonCustodialWithdrawalFeesFiatAmountType
+  type: 'NETWORK' | 'PROCESSING'
+}
+
+export type CustodialToNonCustodialWithdrawalFeesResponseType = {
+  fees: CustodialToNonCustodialWithdrawalFeeType[]
+  minAmount: {
+    amount: CustodialToNonCustodialWithdrawalFeesAmountType
+    fiat: CustodialToNonCustodialWithdrawalFeesFiatAmountType
+  }
+  sendAmount: {
+    amount: CustodialToNonCustodialWithdrawalFeesAmountType
+    fiat: CustodialToNonCustodialWithdrawalFeesFiatAmountType
+  }
+  totalFees: {
+    amount: CustodialToNonCustodialWithdrawalFeesAmountType
+    fiat: CustodialToNonCustodialWithdrawalFeesFiatAmountType
   }
 }

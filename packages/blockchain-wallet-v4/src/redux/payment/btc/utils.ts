@@ -1,4 +1,4 @@
-import { always, assoc, compose, converge, curry, drop, equals, or, prop, propEq, set } from 'ramda'
+import { always, assoc, compose, converge, curry, drop, or, prop, propEq, set } from 'ramda'
 
 import * as Coin from '../../../coinSelection/coin'
 import { Address, HDAccount, Wallet } from '../../../types'
@@ -21,13 +21,14 @@ export const isValidAddressOrIndex = curry((wallet, candidate) =>
 // From
 export const ADDRESS_TYPES = {
   ACCOUNT: 'ACCOUNT',
+  ACTIVE: 'ACTIVE',
   ADDRESS: 'ADDRESS',
   CUSTODIAL: 'CUSTODIAL',
   EXTERNAL: 'EXTERNAL',
   INTEREST: 'INTEREST',
   LEGACY: 'LEGACY', // Imported Addresses
-  LOCKBOX: 'LOCKBOX',
   SCRIPT: 'SCRIPT',
+  STAKING: 'STAKING',
   WATCH_ONLY: 'WATCH_ONLY'
 }
 
@@ -99,27 +100,6 @@ export const fromAccount = (network, state, index) => {
   }
 }
 
-export const fromLockbox = (network, state, xpub, coin) => {
-  const account = equals(coin, 'BTC')
-    ? S.kvStore.lockbox.getLockboxBtcAccount(state, xpub)
-    : S.kvStore.lockbox.getLockboxBchAccount(state, xpub)
-  const hdAccount = HDAccount.fromJS(account.getOrFail(), 0)
-
-  const changeIndex = equals(coin, 'BTC')
-    ? S.data.btc.getChangeIndex(xpub, state)
-    : S.data.bch.getChangeIndex(xpub, state)
-  const changeAddress = changeIndex
-    .map((index) => HDAccount.getChangeAddress(hdAccount, index, network))
-    .getOrFail('missing_change_address')
-
-  return {
-    change: changeAddress,
-    changeIndex: changeIndex.getOrElse(0),
-    from: [xpub],
-    fromType: ADDRESS_TYPES.LOCKBOX
-  }
-}
-
 export const fromCustodial = (origin) => {
   return {
     from: origin,
@@ -152,7 +132,7 @@ export const fromPrivateKey = (network, wallet, key) => {
 }
 
 // toOutputAccount :: Coin -> String -> ReduxState -> Integer -> Object
-export const toOutputAccount = (coin, network, state, accountIndex) => {
+export const toOutputAccount = (coin, network, state, accountIndex, addressIndex) => {
   const wallet = S.wallet.getWallet(state)
   const account = Wallet.getAccount(accountIndex, wallet).get() // throw if nothing
   const xpub =
@@ -161,7 +141,10 @@ export const toOutputAccount = (coin, network, state, accountIndex) => {
     coin === 'BTC'
       ? S.data.btc.getReceiveIndex(xpub, state)
       : S.data.bch.getReceiveIndex(xpub, state)
-  const receiveIndex = receiveIndexR.getOrFail(new Error('missing_receive_address'))
+  const receiveIndex =
+    addressIndex !== undefined
+      ? addressIndex
+      : receiveIndexR.getOrFail(new Error('missing_receive_address'))
   const address =
     coin === 'BTC'
       ? HDAccount.getReceiveAddress(account, receiveIndex, network)
@@ -171,27 +154,6 @@ export const toOutputAccount = (coin, network, state, accountIndex) => {
     address,
     addressIndex: receiveIndex,
     type: ADDRESS_TYPES.ACCOUNT
-  }
-}
-
-// toLockBoxAccount :: Coin -> String -> ReduxState -> String -> Object
-export const toLockboxAccount = (coin, network, state, xpub) => {
-  const receiveIndexR =
-    coin === 'BTC'
-      ? S.data.btc.getReceiveIndex(xpub, state)
-      : S.data.bch.getReceiveIndex(xpub, state)
-
-  const receiveIndex = receiveIndexR.getOrFail(new Error('missing_receive_address'))
-
-  const address =
-    coin === 'BTC'
-      ? S.common.btc.getAddressLockbox(network, xpub, receiveIndex, state)
-      : S.common.bch.getAddressLockbox(network, xpub, receiveIndex, state)
-  return {
-    address,
-    addressIndex: receiveIndex,
-    type: ADDRESS_TYPES.LOCKBOX,
-    xpub
   }
 }
 
@@ -214,13 +176,10 @@ export const toOutputAddress = (address) => ({
 })
 
 // toOutputAccount :: Network -> ReduxState -> String|Integer -> String -> Object
-export const toOutput = curry((coin, network, state, destination, type) => {
+export const toOutput = curry((coin, network, state, destination, type, addressIndex) => {
   switch (type) {
     case ADDRESS_TYPES.ACCOUNT:
-      return toOutputAccount(coin, network, state, destination)
-    case ADDRESS_TYPES.LOCKBOX: {
-      return toLockboxAccount(coin, network, state, destination)
-    }
+      return toOutputAccount(coin, network, state, destination, addressIndex)
     case ADDRESS_TYPES.SCRIPT: {
       return toOutputScript(destination)
     }
@@ -241,8 +200,6 @@ export const toCoin = curry((network, fromData, input) => {
       return Coin.fromJS(assoc('path', path, input), network)
     case ADDRESS_TYPES.LEGACY:
       return Coin.fromJS(input, network)
-    case ADDRESS_TYPES.LOCKBOX:
-      return Coin.fromJS(assoc('path', input.xpub.path, input), network)
     case ADDRESS_TYPES.WATCH_ONLY:
       return Coin.fromJS(assoc('priv', fromData.wifKeys[0], input), network)
     case ADDRESS_TYPES.EXTERNAL:

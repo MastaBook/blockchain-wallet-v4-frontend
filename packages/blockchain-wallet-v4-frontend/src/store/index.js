@@ -6,89 +6,83 @@ import { createHashHistory } from 'history'
 import { persistCombineReducers, persistStore } from 'redux-persist'
 import { configureStore } from '@reduxjs/toolkit'
 import { compose } from 'redux'
-import getStoredStateMigrateV4 from 'redux-persist/lib/integration/getStoredStateMigrateV4'
 import storage from 'redux-persist/lib/storage'
 import createSagaMiddleware from 'redux-saga'
+import Worker from 'web-worker'
+import { v4 as uuidv4 } from 'uuid'
 
 import { coreMiddleware } from '@core'
-import { ApiSocket, createWalletApi, HorizonStreamingService, Socket } from '@core/network/index.ts'
+import { ApiSocket, createWalletApi, HorizonStreamingService, Socket } from '@core/network'
 import { serializer } from '@core/types'
-import { actions, rootReducer, rootSaga, selectors } from 'data'
-
+import { actions, rootReducer, rootSaga, selectors, model } from 'data'
+import { isBrowserSupported } from 'services/browser'
 import {
-  analyticsMiddleware,
-  autoDisconnection,
-  streamingXlm,
-  webSocketCoins,
-  webSocketRates
-} from '../middleware'
+  createNabuErrorFulfilledInterceptor,
+  createNabuErrorRejectedInterceptor,
+  createNabuErrorAnalyticsInterceptor
+} from 'services/errors/NabuError'
+import axios from 'axios'
 
-const devToolsConfig = {
-  actionsBlacklist: [
-    // '@@redux-form/INITIALIZE',
-    // '@@redux-form/CHANGE',
-    // '@@redux-form/REGISTER_FIELD',
-    // '@@redux-form/UNREGISTER_FIELD',
-    // '@@redux-form/UPDATE_SYNC_ERRORS',
-    // '@@redux-form/FOCUS',
-    // '@@redux-form/BLUR',
-    // '@@redux-form/DESTROY',
-    // '@@redux-form/RESET'
-    '@CORE.COINS_WEBSOCKET_MESSAGE',
-    '@CORE.FETCH_ETH_LATEST_BLOCK_SUCCESS',
-    '@EVENT.RATES_SOCKET.WEBSOCKET_MESSAGE'
-  ],
-  maxAge: 1000,
-  serialize: serializer
+import { analyticsMiddleware, streamingXlm, webSocketCoins, webSocketRates } from '../middleware'
+
+const manuallyRouteToErrorPage = (error) => {
+  if (window.history.replaceState) {
+    window.history.replaceState(null, '', `#app-error?error=${error}`)
+  } else {
+    window.location.hash = `#app-error?error=${error}`
+  }
 }
 
 const configuredStore = async function () {
+  // immediately load app configuration
+  let options
+  try {
+    const res = await fetch('/wallet-options-v4.json')
+    options = await res.json()
+  } catch (e) {
+    throw new Error('errorWalletOptionsApi')
+  }
+
+  // set session id for sardine integration
+  sessionStorage.setItem(model.profile.X_SESSION_ID, uuidv4())
+
+  // ensure browser is supported
+  const browserSupported = isBrowserSupported()
+  if (!browserSupported) {
+    manuallyRouteToErrorPage('unsupportedBrowser')
+  }
+
+  // offload asset configuration fetch/parse from main thread
+  if (window.Worker) {
+    const url = new URL('./worker.assets.js', import.meta.url)
+    const worker = new Worker(url)
+
+    // set event listener upon worker completion
+    worker.addEventListener('message', (e) => {
+      try {
+        // message response is json string, parse and set coins on window
+        window.coins = JSON.parse(e.data)
+      } catch (e) {
+        // failed to parse json, meaning there was an error
+        manuallyRouteToErrorPage('errorAssetsApi')
+      }
+    })
+
+    // start worker with stringified args since some browsers only support passing strings as args
+    worker.postMessage(
+      JSON.stringify({
+        assetApi: options.domains.api,
+        openSeaApi: options.domains.opensea
+      })
+    )
+  } else {
+    manuallyRouteToErrorPage('unsupportedBrowser')
+  }
+
+  // initialize router
   const history = createHashHistory()
-  const sagaMiddleware = createSagaMiddleware()
-  const walletPath = 'wallet.payload'
-  const kvStorePath = 'wallet.kvstore'
+
   const { isAuthenticated } = selectors.auth
-
-  const res = await fetch('/wallet-options-v4.json')
-  const options = await res.json()
-  const assetsRes = await fetch(`${options.domains.api}/assets/currencies/custodial`)
-  const erc20Res = await fetch(`${options.domains.api}/assets/currencies/erc20`)
-  const assets = await assetsRes.json()
-  const erc20s = await erc20Res.json()
-
-  const erc20Whitelist = options.platforms.web.erc20s
-
-  let supportedCoins = assets.currencies
-  let supportedErc20s = erc20s.currencies
-  if (erc20Whitelist) {
-    supportedCoins = supportedCoins.filter(({ type, symbol }) =>
-      type.name !== 'ERC20' ? true : erc20Whitelist.indexOf(symbol) >= 0
-    )
-    supportedErc20s = []
-  }
-
-  // hmmmm....
-  window.coins = {
-    ...supportedCoins.reduce(
-      (acc, curr) => ({
-        ...acc,
-        [curr.symbol]: { coinfig: curr }
-      }),
-      {}
-    ),
-    ...supportedErc20s.reduce(
-      (acc, curr) => ({
-        ...acc,
-        [curr.symbol]: { coinfig: curr }
-      }),
-      {}
-    )
-  }
-
-  // TODO: remove this
-  window.coins.XLM.coinfig.type.isMemoBased = true
-
-  const apiKey = '1770d5d9-bcea-4d28-ad21-6cbd5be018a8'
   const socketUrl = options.domains.webSocket
   const horizonUrl = options.domains.horizon
   const coinsSocket = new Socket({
@@ -111,33 +105,51 @@ const configuredStore = async function () {
     eth: 1,
     xlm: 'public'
   }
+  axios.interceptors.response.use(
+    createNabuErrorFulfilledInterceptor(),
+    createNabuErrorRejectedInterceptor()
+  )
+
   const api = createWalletApi({
-    apiKey,
+    apiKey: '1770d5d9-bcea-4d28-ad21-6cbd5be018a8',
     getAuthCredentials,
     networks,
     options,
     reauthenticate
   })
+
+  // initialise saga middleware
+  const sagaMiddleware = createSagaMiddleware({
+    context: {
+      api
+    }
+  })
+
   const persistWhitelist = ['session', 'preferences', 'cache']
   const store = configureStore({
-    devTools: devToolsConfig,
+    devTools: {
+      actionsDenylist: [
+        '@CORE.COINS_WEBSOCKET_MESSAGE',
+        '@CORE.FETCH_ETH_LATEST_BLOCK_SUCCESS',
+        '@EVENT.RATES_SOCKET.WEBSOCKET_MESSAGE',
+        'misc/pingManifestFile'
+      ],
+      maxAge: 1000,
+      serialize: serializer
+    },
     middleware: compose([
       sagaMiddleware,
       routerMiddleware(history),
-      coreMiddleware.kvStore({ api, isAuthenticated, kvStorePath }),
+      coreMiddleware.kvStore({ api, isAuthenticated, kvStorePath: 'wallet.kvstore' }),
       streamingXlm(xlmStreamingService, api),
       webSocketRates(ratesSocket),
       webSocketCoins(coinsSocket),
-      coreMiddleware.walletSync({ api, isAuthenticated, walletPath }),
-      analyticsMiddleware(),
-      autoDisconnection()
+      coreMiddleware.walletSync({ api, isAuthenticated, walletPath: 'wallet.payload' }),
+      analyticsMiddleware()
     ]),
     reducer: connectRouter(history)(
       persistCombineReducers(
         {
-          getStoredState: getStoredStateMigrateV4({
-            whitelist: persistWhitelist
-          }),
           key: 'root',
           storage,
           whitelist: persistWhitelist
@@ -160,12 +172,12 @@ const configuredStore = async function () {
     ratesSocket
   })
 
-  // expose globals here
-  window.createTestXlmAccounts = () => {
-    store.dispatch(actions.core.data.xlm.createTestAccounts())
-  }
-
   store.dispatch(actions.goals.defineGoals())
+
+  axios.interceptors.response.use(
+    (response) => response,
+    createNabuErrorAnalyticsInterceptor(store.dispatch)
+  )
 
   return {
     history,

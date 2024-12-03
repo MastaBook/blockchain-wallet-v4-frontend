@@ -3,9 +3,10 @@ import { FormattedMessage } from 'react-intl'
 import styled from 'styled-components'
 
 import { Icon } from 'blockchain-info-components'
+import { CellHeaderText, CellText } from 'components/Table'
+import { ModalName } from 'data/types'
 
 import { TableColumnsType } from '..'
-import { CellHeaderText, CellText } from '.'
 
 const HeaderWrapper = styled.div`
   display: flex;
@@ -15,27 +16,34 @@ const HeaderWrapper = styled.div`
 `
 const CellWrapper = styled(HeaderWrapper)`
   align-items: center;
+  gap: 8px;
 
   &:hover {
     cursor: pointer;
   }
 `
-const CoinIcon = styled(Icon)`
-  margin-right: 16px;
-`
 
-export const getNameColumn = (modalActions: TableColumnsType['modalActions']) => ({
+export const getNameColumn = (
+  modalActions: TableColumnsType['modalActions'],
+  routerActions: TableColumnsType['routerActions'],
+  isCoinViewV2Enabled: boolean,
+  isUkUser: boolean
+) => ({
   Cell: ({ row: { original: values } }) => {
     return (
       <CellWrapper
         onClick={() => {
-          modalActions.showModal('REQUEST_CRYPTO_MODAL', {
-            origin: 'Prices',
-            preselectedCoin: values.coin
-          })
+          if (isCoinViewV2Enabled || isUkUser) {
+            routerActions.push(`/coins/${values.coin}`)
+          } else {
+            modalActions.showModal(ModalName.REQUEST_CRYPTO_MODAL, {
+              origin: 'Prices',
+              preselectedCoin: values.coin
+            })
+          }
         }}
       >
-        <CoinIcon name={values.coin} size='32px' color={values.coin} />
+        <Icon name={values.coin} size='32px' color={values.coin} />
         <CellText>{values.name}</CellText>
       </CellWrapper>
     )

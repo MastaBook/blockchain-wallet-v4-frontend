@@ -21,7 +21,7 @@ import {
   propEq
 } from 'ramda'
 
-import { RemoteDataType } from '@core/types'
+import { ExtractSuccess, RemoteDataType, UserRiskSettings } from '@core/types'
 import { selectors } from 'data'
 import { RootState } from 'data/rootReducer'
 
@@ -30,6 +30,7 @@ import { UserDataType } from './types'
 
 export const getUserData = (state: RootState) => state.profile.userData
 export const getUserCampaigns = (state: RootState) => state.profile.userCampaigns
+export const getUserRiskSettings = (state: RootState) => state.profile.userRiskSettings
 
 export const getUserId = compose(lift(prop('id')), getUserData)
 export const getWalletAddresses = compose(lift(prop('walletAddresses')), getUserData)
@@ -38,9 +39,11 @@ export const getUserKYCState = compose(lift(prop('kycState')), getUserData) as (
   state: RootState
 ) => RemoteDataType<string, UserDataType['kycState']>
 export const getTags = compose(lift(path(['tags'])), getUserData)
+export const getCowboysTag = compose(lift(path(['tags', 'COWBOYS_2022'])), getUserData)
 export const getSunRiverTag = compose(lift(path(['tags', 'SUNRIVER'])), getUserData)
 export const getPowerPaxTag = compose(lift(hasPath(['tags', 'POWER_PAX'])), getUserData)
 export const getBlockstackTag = compose(lift(path(['tags', 'BLOCKSTACK'])), getUserData)
+export const isInternalTester = compose(lift(hasPath(['tags', 'INTERNAL_TESTING'])), getUserData)
 export const isUserCreated = compose(
   lift(equals(USER_ACTIVATION_STATES.CREATED)),
   getUserActivationState
@@ -62,10 +65,19 @@ export const isSilverOrAbove = compose(
   getUserData
 )
 
-export const getCurrentTier = compose(path(['data', 'current']), lift(path(['tiers'])), getUserData)
-export const getUserCurrencies = createSelector(getUserData, (userDataR) => {
-  const userData = userDataR.getOrElse({} as UserDataType)
-  return userData.currencies
+export const getCurrentTier = createSelector(getUserData, (userDataR) => {
+  return lift((userData: ExtractSuccess<typeof userDataR>) => userData.tiers?.current)(userDataR)
+})
+export const getUserCurrencies = createSelector([getUserData], (userDataR) => {
+  return lift((userData: ExtractSuccess<typeof userDataR>) => ({
+    ...userData.currencies
+  }))(userDataR)
+})
+export const getTradingCurrency = createSelector([getUserCurrencies], (userCurrenciesR) => {
+  return lift(
+    (userCurrencies: ExtractSuccess<typeof userCurrenciesR>) =>
+      userCurrencies.preferredFiatTradingCurrency
+  )(userCurrenciesR)
 })
 export const getUserCountryCode = compose(lift(path(['address', 'country'])), getUserData)
 export const getUserStateCode = compose(lift(path(['address', 'state'])), getUserData)
@@ -75,6 +87,8 @@ export const getKycDocResubmissionStatus = compose(
   lift(path(['resubmission', 'reason'])),
   getUserData
 )
+export const getUserLegalEntity = (state: RootState) =>
+  state.profile.userData.map((e) => e.userLegalEntity).getOrElse(undefined)
 
 export const getTiers = path(['profile', 'userTiers'])
 export const getTier = curry((state, tierIndex) =>
@@ -89,6 +103,9 @@ export const isCountrySupported = (countryCode, supportedCountries) =>
   any(propEq('code', countryCode), supportedCountries)
 
 export const getApiToken = path(['profile', 'apiToken'])
+
+// @ts-ignore
+export const getUserApiToken = (state) => getApiToken(state).getOrElse('')
 
 // @ts-ignore
 export const isAuthenticated = (state) => getApiToken(state).map(prop('isActive'))
@@ -131,6 +148,24 @@ export const getLinkToExchangeAccountDeeplink = path([
 export const getShareWalletAddressesStatus = (state: RootState) =>
   state.profile.exchangeOnboarding.shareWalletAddressesWithExchange
 
+export const getSofiUserData = (state: RootState) => state.profile.sofiData
+
+export const getSofiMigrationStatus = (state: RootState) => state.profile.sofiMigrationStatus
+
+export const getSofiLinkData = (state: RootState) => state.profile.sofiLinkData
+
+export const getSofiAssociateNabuUserStatus = (state: RootState) =>
+  state.profile.sofiAssociateNabuUser
+
+export const getSofiMigrationStatusFromPolling = (state: RootState) =>
+  state.profile.sofiMigrationStatusFromPolling
+
+export const getSofiUserMigrationStatus = (state: RootState) =>
+  state.profile.sofiUserMigrationStatus
+
+export const getSofiMigrationTransferedBalances = (state: RootState) =>
+  state.profile.sofiMigrationTransferedBalances
+
 export const getRemainingCoins = (state) => {
   // TODO, fix this
   const exchangeCoinsList = []
@@ -152,3 +187,9 @@ export const isExchangeRelinkRequired = (state): RemoteDataType<string, boolean 
   lift((user: UserDataType) => {
     return not(isNil(prop('settings', user))) && length(getRemainingCoins(state))
   })(getUserData(state))
+
+export const isFlowInRiskSettings = (state: RootState, flowName: string): boolean => {
+  const userRiskSettings: UserRiskSettings = getUserRiskSettings(state).getOrElse({ flows: [] })
+
+  return userRiskSettings.flows.some((ur) => ur.name === flowName)
+}

@@ -2,7 +2,9 @@ import { call, put, select } from 'redux-saga/effects'
 
 import { APIType } from '@core/network/api'
 import { actions, selectors } from 'data'
+import { ModalName } from 'data/types'
 
+import { RB_ERROR } from './model'
 import { actions as A } from './slice'
 import {
   RecurringBuyItemState,
@@ -15,7 +17,7 @@ export default ({ api }: { api: APIType }) => {
   const showModal = function* ({ payload }: ReturnType<typeof A.showModal>) {
     const { origin } = payload
     yield put(
-      actions.modals.showModal('RECURRING_BUYS_MODAL', {
+      actions.modals.showModal(ModalName.RECURRING_BUYS_MODAL, {
         origin
       })
     )
@@ -66,8 +68,11 @@ export default ({ api }: { api: APIType }) => {
         paymentMethod: '',
         period: ''
       }
-      const order = selectors.components.buySell.getBSOrder(yield select())
-      if (!order) throw new Error('To make a recurring buy, more information is needed')
+      const order = selectors.components.buySell
+        .getBSOrder(yield select())
+        .getOrFail(RB_ERROR.ORDER_NOT_FOUND)
+
+      // if (!order) throw new Error('To make a recurring buy, more information is needed')
 
       const { inputCurrency, inputQuantity, outputCurrency, paymentMethodId, paymentType } = order
       const period = selectors.components.recurringBuy.getPeriod(yield select())
@@ -79,7 +84,7 @@ export default ({ api }: { api: APIType }) => {
         body.paymentMethod = paymentType
         body.paymentMethodId = paymentMethodId
       } else {
-        throw new Error('To make a recurring buy, more information is needed')
+        throw new Error(RB_ERROR.ORDER_INCOMPLETE)
       }
 
       const data: RecurringBuyRegisteredList = yield call(api.createRecurringBuy, body)

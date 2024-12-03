@@ -5,27 +5,45 @@ import { selectors } from 'data'
 import { RootState } from 'data/rootReducer'
 
 export const getData = (state: RootState) => {
+  const interestEligibleR = selectors.components.interest.getInterestEligible(state)
+  const interestRatesR = selectors.components.interest.getInterestRates(state)
   const cardsR = selectors.components.buySell.getBSCards(state)
   const userDataR = selectors.modules.profile.getUserData(state)
   const withdrawLockCheckR = selectors.components.send.getWithdrawLockCheckRule(state)
-  const afterTransactionR = selectors.components.interest.getAfterTransaction(state)
   const recurringBuyListR = selectors.components.recurringBuy.getRegisteredList(state)
+  const orderR = selectors.components.buySell.getBSOrder(state)
+  const hasCowboysTagR = selectors.modules.profile.getCowboysTag(state)
 
   return lift(
     (
       cards: ExtractSuccess<typeof cardsR>,
+      hasCowboysTag: ExtractSuccess<typeof hasCowboysTagR>,
       userData: ExtractSuccess<typeof userDataR>,
       withdrawLockCheck: ExtractSuccess<typeof withdrawLockCheckR>,
-      afterTransaction: ExtractSuccess<typeof afterTransactionR>,
-      recurringBuyList: ExtractSuccess<typeof recurringBuyListR>
+      recurringBuyList: ExtractSuccess<typeof recurringBuyListR>,
+      order: ExtractSuccess<typeof orderR>,
+      interestRates: ExtractSuccess<typeof interestRatesR>,
+      interestEligible: ExtractSuccess<typeof interestEligibleR>
     ) => {
       return {
-        afterTransaction,
         cards,
+        hasCowboysTag,
+        interestEligible,
+        interestRates,
         lockTime: withdrawLockCheck?.lockTime || 0,
+        order,
         recurringBuyList,
         userData
       }
     }
-  )(cardsR, userDataR, withdrawLockCheckR, afterTransactionR, recurringBuyListR)
+  )(
+    cardsR,
+    hasCowboysTagR,
+    userDataR,
+    withdrawLockCheckR,
+    recurringBuyListR,
+    orderR,
+    interestRatesR,
+    interestEligibleR
+  )
 }

@@ -1,18 +1,23 @@
-import moment from 'moment'
-import { compose, equals, lift, prop, sortBy, tail } from 'ramda'
+import sha256 from 'crypto-js/sha256'
+import { differenceInMilliseconds, subSeconds } from 'date-fns'
+import { compose, equals, prop, sortBy, tail } from 'ramda'
+import { stopSubmit } from 'redux-form'
 import { call, cancel, delay, fork, put, race, select, spawn, take } from 'redux-saga/effects'
+import Cookies from 'universal-cookie'
 
 import { Remote } from '@core'
-import { ExtractSuccess } from '@core/types'
+import { ExtractSuccess, WalletOptionsType } from '@core/types'
 import { actions, actionTypes, selectors } from 'data'
-import * as C from 'services/alerts'
+import { LOGIN_FORM } from 'data/auth/model'
+import { sendMessageToMobile } from 'data/auth/sagas.mobile'
+import { Analytics, AuthMagicLink, ModalName, PlatformTypes, ProductAuthOptions } from 'data/types'
 import { promptForSecondPassword } from 'services/sagas'
 
 import * as A from './actions'
 import * as AT from './actionTypes'
 import { KYC_STATES, USER_ACTIVATION_STATES } from './model'
 import * as S from './selectors'
-import { UserDataType } from './types'
+import { ExchangeAuthOriginType, SofiUserMigrationStatus, UserDataType } from './types'
 
 export const logLocation = 'modules/profile/sagas'
 export const userRequiresRestoreError = 'User restored'
@@ -21,8 +26,6 @@ export const renewUserDelay = 30000
 
 let renewSessionTask = null
 let renewUserTask = null
-let renewSession
-let recoverUser
 
 export default ({ api, coreSagas, networks }) => {
   const renewApiSockets = function* () {
@@ -31,19 +34,28 @@ export default ({ api, coreSagas, networks }) => {
   }
 
   const waitForUserId = function* () {
-    const userId = yield select(selectors.core.kvStore.userCredentials.getUserId)
-    if (Remote.Success.is(userId)) return userId.getOrElse(null)
+    const userCredentials = yield select(
+      selectors.core.kvStore.unifiedCredentials.getUnifiedOrLegacyNabuEntry
+    )
 
+    if (Remote.Success.is(userCredentials)) {
+      const { nabuUserId } = userCredentials.getOrElse({ nabuUserId: null })
+      return nabuUserId
+    }
     yield race({
-      failure: take(
-        actionTypes.core.kvStore.userCredentials.FETCH_METADATA_USER_CREDENTIALS_FAILURE
-      ),
-      success: take(
-        actionTypes.core.kvStore.userCredentials.FETCH_METADATA_USER_CREDENTIALS_SUCCESS
-      )
+      failure: take([
+        actionTypes.core.kvStore.userCredentials.FETCH_METADATA_USER_CREDENTIALS_FAILURE,
+        actionTypes.core.kvStore.unifiedCredentials.FETCH_METADATA_UNIFIED_CREDENTIALS_FAILURE
+      ]),
+      success: take([
+        actionTypes.core.kvStore.userCredentials.FETCH_METADATA_USER_CREDENTIALS_SUCCESS,
+        actionTypes.core.kvStore.unifiedCredentials.FETCH_METADATA_UNIFIED_CREDENTIALS_SUCCESS
+      ])
     })
-
-    return (yield select(selectors.core.kvStore.userCredentials.getUserId)).getOrElse(null)
+    const { nabuUserId } = (yield select(
+      selectors.core.kvStore.unifiedCredentials.getUnifiedOrLegacyNabuEntry
+    )).getOrElse({})
+    return nabuUserId
   }
 
   const renewUser = function* (renewIn = 0) {
@@ -122,6 +134,7 @@ export default ({ api, coreSagas, networks }) => {
             tail,
             // @ts-ignore
             sortBy(prop('index'))
+            // @ts-ignore
           )(tiersData.tiers)
         )
       )
@@ -153,20 +166,23 @@ export default ({ api, coreSagas, networks }) => {
     return token
   }
 
-  const setSession = function* (userId, lifetimeToken, email, guid) {
+  const setSession = function* (nabuUserId, nabuLifetimeToken, email, guid) {
     try {
       const { expiresAt, token: apiToken } = yield call(
         api.generateSession,
-        userId,
-        lifetimeToken,
+        nabuUserId,
+        nabuLifetimeToken,
         email,
         guid
       )
       yield put(A.setApiTokenSuccess(apiToken))
       yield call(fetchUser)
       yield call(renewApiSockets)
-      const expiresIn = moment(expiresAt).subtract(5, 's').diff(moment())
-      yield spawn(renewSession, userId, lifetimeToken, email, guid, expiresIn)
+      const expiresIn = Math.abs(
+        differenceInMilliseconds(subSeconds(new Date(expiresAt), 5), new Date())
+      )
+      // eslint-disable-next-line @typescript-eslint/no-use-before-define
+      yield spawn(renewSession, nabuUserId, nabuLifetimeToken, email, guid, expiresIn)
     } catch (e) {
       if (prop('status', e) === 409) {
         throw new Error(e.description)
@@ -175,62 +191,35 @@ export default ({ api, coreSagas, networks }) => {
     }
   }
 
-  renewSession = function* (userId, lifetimeToken, email, guid, renewIn = 0) {
+  const renewSession = function* (nabuUserId, nabuLifetimeToken, email, guid, renewIn = 0) {
     try {
       yield delay(renewIn)
-      yield call(setSession, userId, lifetimeToken, email, guid)
+      yield call(setSession, nabuUserId, nabuLifetimeToken, email, guid)
     } catch (e) {
       yield put(A.setApiTokenFailure(e))
       if (e.message && e.message.includes('User linked to another wallet')) {
         return yield put(
           actions.modals.showModal(
-            'NABU_USER_CONFLICT_REDIRECT',
+            ModalName.NABU_USER_CONFLICT_REDIRECT,
             { origin: 'NabuUserAuth' },
             { errorMessage: e.message }
           )
         )
       }
-      yield spawn(renewSession, userId, lifetimeToken, email, guid, authRetryDelay)
+      yield spawn(renewSession, nabuUserId, nabuLifetimeToken, email, guid, authRetryDelay)
     }
   }
 
-  recoverUser = function* () {
+  const recoverUser = function* () {
     const retailToken = yield call(generateRetailToken)
-    const userId = (yield select(selectors.core.kvStore.userCredentials.getUserId)).getOrFail()
-    const lifetimeToken = (yield select(
-      selectors.core.kvStore.userCredentials.getLifetimeToken
-    )).getOrFail()
-    yield call(api.recoverUser, userId, lifetimeToken, retailToken)
+    const credentials = (yield select(
+      selectors.core.kvStore.unifiedCredentials.getUnifiedOrLegacyNabuEntry
+    )).getOrFail('Failed to find user credentials')
+    const { nabuLifetimeToken, nabuUserId } = credentials
+    yield call(api.recoverUser, nabuUserId, nabuLifetimeToken, retailToken)
     const email = (yield select(selectors.core.settings.getEmail)).getOrFail()
     const guid = yield select(selectors.core.wallet.getGuid)
-    yield call(setSession, userId, lifetimeToken, email, guid)
-  }
-
-  const signIn = function* () {
-    try {
-      const email = (yield select(selectors.core.settings.getEmail)).getOrFail('No email')
-      const guid = yield select(selectors.core.wallet.getGuid)
-      yield call(coreSagas.kvStore.userCredentials.fetchMetadataUserCredentials)
-      const userId = (yield select(selectors.core.kvStore.userCredentials.getUserId)).getOrElse(
-        null
-      )
-      const lifetimeToken = (yield select(
-        selectors.core.kvStore.userCredentials.getLifetimeToken
-      )).getOrElse(null)
-      if (!userId || !lifetimeToken) {
-        return yield put(
-          A.fetchUserDataSuccess({
-            kycState: KYC_STATES.NONE,
-            state: USER_ACTIVATION_STATES.NONE
-          })
-        )
-      }
-      yield put(A.setApiTokenLoading())
-
-      renewSessionTask = yield fork(renewSession, userId, lifetimeToken, email, guid, 0)
-    } catch (e) {
-      yield put(actions.logs.logErrorMessage(logLocation, 'signIn', e))
-    }
+    yield call(setSession, nabuUserId, nabuLifetimeToken, email, guid)
   }
 
   const fetchUserCampaigns = function* () {
@@ -241,6 +230,17 @@ export default ({ api, coreSagas, networks }) => {
       yield put(A.fetchUserCampaignsSuccess(userCampaigns))
     } catch (e) {
       yield put(A.fetchUserCampaignsFailure(e))
+    }
+  }
+
+  const fetchUserRiskSettings = function* () {
+    try {
+      yield put(A.fetchUserRiskSettingsLoading())
+      yield call(waitForUserData)
+      const userRiskSettings = yield call(api.getUserRiskSettings)
+      yield put(A.fetchUserRiskSettingsSuccess(userRiskSettings))
+    } catch (e) {
+      yield put(A.fetchUserRiskSettingsFailure(e))
     }
   }
 
@@ -261,33 +261,179 @@ export default ({ api, coreSagas, networks }) => {
 
   const generateAuthCredentials = function* () {
     const retailToken = yield call(generateRetailToken)
-    const { token: lifetimeToken, userId } = yield call(api.createUser, retailToken)
-    yield put(actions.core.kvStore.userCredentials.setUserCredentials(userId, lifetimeToken))
-    return { lifetimeToken, userId }
+    const { isSofi } = yield select(selectors.signup.getProductSignupMetadata)
+    const cookies = new Cookies()
+    const partnerReferralCodeFromCookie = cookies.get('partnerReferralCode')
+    const { token: nabuLifetimeToken, userId: nabuUserId } = yield call(
+      api.createOrGetUser,
+      retailToken,
+      isSofi
+        ? 'SOFI_MIGRATION'
+        : partnerReferralCodeFromCookie === 'sofi'
+        ? 'SOFI_ANONYMOUS'
+        : partnerReferralCodeFromCookie
+    )
+    // write to both to support legacy mobile clients
+    // TODO: in future, consider just writing to unifiedCredentials entry
+    yield put(
+      actions.core.kvStore.userCredentials.setUserCredentials(nabuUserId, nabuLifetimeToken)
+    )
+    yield take([
+      actionTypes.core.kvStore.userCredentials.FETCH_METADATA_USER_CREDENTIALS_SUCCESS,
+      actionTypes.core.kvStore.userCredentials.FETCH_METADATA_USER_CREDENTIALS_FAILURE
+    ])
+
+    yield put(
+      actions.core.kvStore.unifiedCredentials.setUnifiedCredentials({
+        nabu_lifetime_token: nabuLifetimeToken,
+        nabu_user_id: nabuUserId
+      })
+    )
+
+    return { nabuLifetimeToken, nabuUserId }
   }
 
+  const generateExchangeAuthCredentials = function* (countryCode) {
+    const { platform, product, referrerUsername, tuneTid } = yield select(
+      selectors.signup.getProductSignupMetadata
+    )
+    try {
+      const retailToken = yield call(generateRetailToken)
+      const { token: exchangeLifetimeToken, userId: exchangeUserId } = yield call(
+        api.createExchangeUser,
+        countryCode,
+        referrerUsername,
+        retailToken,
+        tuneTid
+      )
+
+      yield put(
+        actions.core.kvStore.unifiedCredentials.setUnifiedCredentials({
+          exchange_lifetime_token: exchangeLifetimeToken,
+          exchange_user_id: exchangeUserId
+        })
+      )
+      return { exchangeLifetimeToken, exchangeUserId }
+    } catch (e) {
+      if (e.code === 4) {
+        yield put(actions.auth.setExchangeAccountConflict(true))
+        // If it's an exchange mobile signup, we want to take user
+        // directly to conflict error message
+        if (
+          product === ProductAuthOptions.EXCHANGE &&
+          (platform === PlatformTypes.ANDROID || platform === PlatformTypes.IOS)
+        ) {
+          yield put(actions.router.push('/select-product'))
+        }
+      }
+      yield put(actions.auth.loginFailure(e.code))
+      yield put(actions.auth.setExchangeAccountCreationFailure(true))
+    }
+  }
+
+  const createExchangeUser = function* (countryCode) {
+    try {
+      const { exchangeLifetimeToken, exchangeUserId } = (yield select(
+        selectors.core.kvStore.unifiedCredentials.getExchangeCredentials
+      )).getOrElse({})
+      if (!exchangeUserId || !exchangeLifetimeToken) {
+        yield call(generateExchangeAuthCredentials, countryCode)
+      }
+    } catch (e) {
+      yield put(actions.logs.logErrorMessage(logLocation, 'exchangeUserCreation', e))
+    }
+  }
+
+  const authAndRouteToExchangeAction = function* (action) {
+    const { origin } = action.payload
+    try {
+      const retailToken = yield call(generateRetailToken)
+      const { platform: loginPlatform, redirect } = yield select(
+        selectors.auth.getProductAuthMetadata
+      )
+      const { platform: signupPlatform } = yield select(selectors.signup.getProductSignupMetadata)
+      // login platform and signup platform come from two different locations
+      // set const to whichever one exists
+      const platform = signupPlatform || loginPlatform
+      const isMobileExchangeSignup =
+        platform === PlatformTypes.ANDROID || platform === PlatformTypes.IOS
+      const magicLinkData: AuthMagicLink = yield select(selectors.auth.getMagicLinkData)
+      const exchangeAuthUrl = magicLinkData?.exchange_auth_url
+      const { exchange: exchangeDomain } = selectors.core.walletOptions
+        .getDomains(yield select())
+        .getOrElse({
+          exchange: 'https://exchange.blockchain.com'
+        } as WalletOptionsType['domains'])
+      const exchangeUrlFromLink = exchangeAuthUrl || redirect
+      const { exchangeLifetimeToken, exchangeUserId } = (yield select(
+        selectors.core.kvStore.unifiedCredentials.getExchangeCredentials
+      )).getOrElse({})
+
+      if (!exchangeUserId || !exchangeLifetimeToken) {
+        if (origin === ExchangeAuthOriginType.Signup && !isMobileExchangeSignup) {
+          return
+        }
+        if (origin === ExchangeAuthOriginType.SideMenu) {
+          return window.open(`${exchangeDomain}`, '_blank', 'noreferrer')
+        }
+      }
+      const { csrfToken, sessionExpirationTime, token } = yield call(
+        api.getExchangeAuthToken,
+        exchangeLifetimeToken,
+        exchangeUserId,
+        retailToken
+      )
+      switch (true) {
+        case isMobileExchangeSignup:
+          sendMessageToMobile(platform, {
+            data: { csrf: csrfToken, jwt: token, jwtExpirationTime: sessionExpirationTime },
+            status: 'success'
+          })
+          yield put(actions.signup.registerSuccess(undefined))
+          break
+        case origin === ExchangeAuthOriginType.SideMenu:
+          window.open(`${exchangeDomain}/trade/auth?jwt=${token}`, '_blank', 'noreferrer')
+          break
+        case exchangeUrlFromLink:
+          window.open(`${exchangeUrlFromLink}${token}`, '_self', 'noreferrer')
+          break
+        default:
+          window.open(`${exchangeDomain}/trade/auth?jwt=${token}`, '_self', 'noreferrer')
+          break
+      }
+    } catch (e) {
+      yield put(actions.logs.logErrorMessage(logLocation, 'exchangeLoginToken', e))
+      yield put(actions.auth.exchangeLoginFailure(e?.code))
+      yield put(
+        actions.analytics.trackEvent({
+          key: Analytics.LOGIN_PASSWORD_DENIED,
+          properties: {
+            site_redirect: 'EXCHANGE',
+            unified: true
+          }
+        })
+      )
+      yield put(stopSubmit(LOGIN_FORM))
+    }
+  }
   const createUser = function* () {
     const token = yield select(S.getApiToken)
     if (!Remote.NotAsked.is(token)) return
 
-    const userIdR = yield select(selectors.core.kvStore.userCredentials.getUserId)
-    const lifetimeTokenR = yield select(selectors.core.kvStore.userCredentials.getLifetimeToken)
-    const authCredentialsR = lift((userId, lifetimeToken) => ({
-      lifetimeToken,
-      userId
-    }))(userIdR, lifetimeTokenR)
     const email = (yield select(selectors.core.settings.getEmail)).getOrFail()
     const guid = yield select(selectors.core.wallet.getGuid)
+    const nabuCredentialsR = yield select(
+      selectors.core.kvStore.unifiedCredentials.getUnifiedOrLegacyNabuEntry
+    )
 
-    const { lifetimeToken, userId } = yield authCredentialsR
-      .map((authCredentials) => {
-        const { lifetimeToken, userId } = authCredentials
-        if (!userId || !lifetimeToken) return call(generateAuthCredentials)
-        return authCredentials
+    const { nabuLifetimeToken, nabuUserId } = yield nabuCredentialsR
+      .map((nabuCredentials) => {
+        if (!nabuCredentials || !nabuCredentials.nabuLifetimeToken || !nabuCredentials.nabuUserId)
+          return call(generateAuthCredentials)
+        return nabuCredentials
       })
-      .getOrElse({} as ExtractSuccess<typeof authCredentialsR>)
-
-    yield call(setSession, userId, lifetimeToken, email, guid)
+      .getOrElse({} as ExtractSuccess<typeof nabuCredentialsR>)
+    yield call(setSession, nabuUserId, nabuLifetimeToken, email, guid)
   }
 
   const updateUser = function* ({ payload }) {
@@ -416,6 +562,75 @@ export default ({ api, coreSagas, networks }) => {
     }
   }
 
+  const signIn = function* ({ payload }: ReturnType<typeof A.signIn>) {
+    try {
+      const { firstLogin } = payload
+      const email = (yield select(selectors.core.settings.getEmail)).getOrFail('No email')
+      const guid = yield select(selectors.core.wallet.getGuid)
+      const createNewUser = (yield select(
+        selectors.core.walletOptions.createNabuUserAtLogin
+      )).getOrElse(false)
+      // TODO: in future only fetch unified credentials
+      const unifiedNabuCredentialsR = yield select(
+        selectors.core.kvStore.unifiedCredentials.getNabuCredentials
+      )
+      const userCredentialsR = yield select(
+        selectors.core.kvStore.userCredentials.getLegacyNabuCredentials
+      )
+      if (!Remote.Success.is(unifiedNabuCredentialsR)) {
+        yield call(coreSagas.kvStore.unifiedCredentials.fetchMetadataUnifiedCredentials)
+      }
+      if (!Remote.Success.is(userCredentialsR)) {
+        yield call(coreSagas.kvStore.userCredentials.fetchMetadataUserCredentials)
+      }
+      const { nabuLifetimeToken, nabuUserId } = (yield select(
+        selectors.core.kvStore.unifiedCredentials.getUnifiedOrLegacyNabuEntry
+      )).getOrElse({})
+      // sync legacy nabu credentials with unified kv entry
+      const unifiedNabuCredentials = (yield select(
+        selectors.core.kvStore.unifiedCredentials.getNabuCredentials
+      )).getOrElse({})
+      if (!unifiedNabuCredentials.nabuUserId || !unifiedNabuCredentials.nabuLifetimeToken) {
+        yield put(
+          actions.core.kvStore.unifiedCredentials.setUnifiedCredentials({
+            nabu_lifetime_token: nabuLifetimeToken,
+            nabu_user_id: nabuUserId
+          })
+        )
+      }
+      if (!firstLogin && createNewUser && (!nabuUserId || !nabuLifetimeToken)) {
+        yield call(createUser)
+      }
+      if (!nabuUserId || !nabuLifetimeToken) {
+        return yield put(
+          A.fetchUserDataSuccess({
+            kycState: KYC_STATES.NONE,
+            state: USER_ACTIVATION_STATES.NONE
+          })
+        )
+      }
+      yield put(A.setApiTokenLoading())
+
+      yield put(actions.modules.profile.fetchUserRiskSettings())
+
+      const isFlowInRiskSettings = selectors.modules.profile.isFlowInRiskSettings(
+        yield select(),
+        'ONBOARDING'
+      )
+
+      if (window?._SardineContext && isFlowInRiskSettings) {
+        window._SardineContext.updateConfig({
+          flow: 'ONBOARDING',
+          userIdHash: sha256(unifiedNabuCredentials.nabuUserId).toString()
+        })
+      }
+
+      renewSessionTask = yield fork(renewSession, nabuUserId, nabuLifetimeToken, email, guid, 0)
+    } catch (e) {
+      yield put(actions.logs.logErrorMessage(logLocation, 'signIn', e))
+    }
+  }
+
   const linkToExchangeAccount = function* ({ payload }) {
     try {
       const { utmCampaign } = payload
@@ -467,7 +682,7 @@ export default ({ api, coreSagas, networks }) => {
           cancel: take([
             AT.LINK_TO_EXCHANGE_ACCOUNT_FAILURE,
             AT.LINK_TO_EXCHANGE_ACCOUNT_SUCCESS,
-            actionTypes.modals.CLOSE_MODAL
+            actions.modals.closeModal.type
           ])
         })
       }
@@ -476,19 +691,246 @@ export default ({ api, coreSagas, networks }) => {
     }
   }
 
+  const initiateSofiLanding = function* () {
+    yield put(A.fetchSofiMigrationStatusLoading())
+    try {
+      const url = window.location.href
+      const queryParams = new URLSearchParams(yield select(selectors.router.getSearch))
+      const sofiLinkDataFromStore = yield select(S.getSofiLinkData)
+      const {
+        aesCiphertext: aesCiphertextFromStore,
+        aesIV: aesIVFromStore,
+        aesTag: aesTagFromStore,
+        aesKeyCiphertext: aesKeyCiphertextFromStore
+      } = sofiLinkDataFromStore
+
+      function getQueryParamCaseInsensitive(url, paramName) {
+        // Create URLSearchParams object from the URL
+        const normalizedParamName = paramName.toLowerCase()
+        // Iterate over all query parameters
+        for (const [key, value] of queryParams) {
+          if (key.toLowerCase() === normalizedParamName) {
+            return value
+          }
+        }
+        // If the parameter is not found, return null or undefined
+        return null
+      }
+
+      const aesCiphertext =
+        (getQueryParamCaseInsensitive(url, 'aesCiphertext') as string) ||
+        (aesCiphertextFromStore as string)
+      const aesIV =
+        (getQueryParamCaseInsensitive(url, 'aesIV') as string) || (aesIVFromStore as string)
+      const aesTag =
+        (getQueryParamCaseInsensitive(url, 'aesTag') as string) || (aesTagFromStore as string)
+      const aesKeyCiphertext =
+        (getQueryParamCaseInsensitive(url, 'aesKeyCipherText') as string) ||
+        (aesKeyCiphertextFromStore as string)
+      // if there are no params in url, just `/sofi`
+      // redirect them to login page
+      if (!aesCiphertext || !aesIV || !aesTag || !aesKeyCiphertext) {
+        return yield put(actions.router.replace('/login'))
+      }
+      yield put(A.setSofiLinkData({ aesCiphertext, aesIV, aesTag, aesKeyCiphertext }))
+
+      // call is user migrated api before loading page
+      const response = yield call(
+        api.sofiMigrationStatusJwt,
+        aesIV,
+        aesCiphertext,
+        aesTag,
+        aesKeyCiphertext
+      )
+
+      let sofiUserState = response.sofiJwtPayload?.state
+      let sofiUserCountry = response.sofiJwtPayload?.country || 'US'
+      if (!sofiUserState) {
+        yield put(A.fetchSofiMigrationStatusFailure('missing US state'))
+        return yield put(actions.router.push('/sofi'))
+      }
+      if (sofiUserState.substring(0, 2) !== 'US') {
+        sofiUserState = 'US-' + sofiUserState
+      }
+
+      yield put(actions.router.push('/sofi'))
+
+      yield put(
+        A.fetchSofiMigrationStatusSuccess({
+          ...response,
+          sofiJwtPayload: {
+            ...response.sofiJwtPayload,
+            country: sofiUserCountry,
+            state: sofiUserState
+          }
+        })
+      )
+    } catch (e) {
+      //TODO add error handling
+      yield put(A.fetchSofiMigrationStatusFailure(e))
+      yield put(actions.router.push('/sofi'))
+    }
+
+    // also save information retrieved from response in redux
+    // so we can use it for signup information
+  }
+
+  const fetchSofiUserStatus = function* () {
+    try {
+      yield call(waitForUserData)
+      const response = yield call(api.sofiMigrationStatusNabuToken)
+      yield put(A.setSofiUserStatus(response.migrationStatus))
+
+      if (response.migrationStatus === 'SUCCESS') {
+        yield put(A.setSofiMigratedBalances(response?.balances))
+        return true
+      }
+
+      if (response.migrationStatus === 'PENDING') {
+        yield put(A.setSofiMigratedBalances(response?.balances))
+      }
+      // i don't think i want to dot his
+      // if (response.migrationStatus === 'AWAITING_USER') {
+      //   return true
+      // }
+      if (response?.migrationStatus === 'FAILURE' || !response?.migrationStatus) {
+        return true
+      }
+    } catch (error) {
+      return false
+    }
+    yield delay(7000)
+    return yield call(fetchSofiUserStatus)
+  }
+
+  const migrateSofiUser = function* () {
+    yield put(A.migrateSofiUserLoading())
+    try {
+      const { sofiSSN } = yield select(selectors.form.getFormValues('verifySofiSsn'))
+      const nabuSessionToken = (yield select(selectors.modules.profile.getApiToken)).getOrFail()
+      // TODO commenting out for now, will use
+      // mock response for now
+
+      const response = yield call(api.migrateSofiUser, sofiSSN, nabuSessionToken)
+
+      const userStatusResponse = yield call(api.sofiMigrationStatusNabuToken)
+
+      if (userStatusResponse.migrationStatus === SofiUserMigrationStatus.SUCCESS) {
+        yield put(A.setSofiMigratedBalances(userStatusResponse.balances))
+      }
+      if (userStatusResponse.migrationStatus === SofiUserMigrationStatus.PENDING) {
+        yield put(A.setSofiMigratedBalances(userStatusResponse?.balances))
+        yield put(A.fetchSofiUserStatus())
+      }
+      yield put(A.migrateSofiUserSuccess(response))
+      yield put(A.setSofiUserStatus(response.migration_status))
+    } catch (e) {
+      yield put(
+        A.migrateSofiUserFailure({
+          id: e.id,
+          message: e.message,
+          title: e.title
+        })
+      )
+    }
+  }
+
+  const redirectAfterAssociation = function* () {
+    const bakktRedirectStates = (yield select(
+      selectors.core.walletOptions.getBakktRedirectUSStates
+    )).getOrElse([])
+    const { sofiJwtPayload } = (yield select(selectors.modules.profile.getSofiUserData)).getOrElse(
+      {}
+    )
+    const { state: sofiUserState } = sofiJwtPayload
+    const bakktRedirect = bakktRedirectStates.includes(sofiUserState)
+    if (bakktRedirect) {
+      yield put(actions.router.push('/sofi-mobile'))
+    } else {
+      yield put(actions.router.push('/sofi-verify'))
+    }
+  }
+
+  const associateSofiUserSignup = function* () {
+    const { aesIV, aesCiphertext, aesTag, aesKeyCiphertext } = yield select(S.getSofiLinkData)
+
+    const associateBeforeEmailVerification = (yield select(
+      selectors.core.walletOptions.getAssociateSofiBeforeEmailVerification
+    )).getOrElse(false)
+
+    const nabuSessionToken = (yield select(selectors.modules.profile.getApiToken)).getOrFail()
+    yield put(A.associateSofiUserLoading())
+    try {
+      yield call(
+        api.associateNabuUser,
+        aesIV,
+        aesCiphertext,
+        aesTag,
+        aesKeyCiphertext,
+        nabuSessionToken
+      )
+
+      if (associateBeforeEmailVerification) {
+        yield put(actions.router.push('/verify-email-step'))
+      } else {
+        yield call(redirectAfterAssociation)
+      }
+      yield put(A.associateSofiUserSuccess(true))
+
+      //TODO do we need to handle a success?
+    } catch (e) {
+      yield put(A.associateSofiUserFailure(e))
+      yield put(actions.router.push('/sofi-error'))
+    }
+  }
+
+  const associateSofiUserLogin = function* () {
+    const { aesIV, aesCiphertext, aesTag, aesKeyCiphertext } = yield select(S.getSofiLinkData)
+
+    const nabuSessionToken = (yield select(selectors.modules.profile.getApiToken)).getOrFail()
+    yield put(A.associateSofiUserLoading())
+    try {
+      yield call(
+        api.associateNabuUser,
+        aesIV,
+        aesCiphertext,
+        aesTag,
+        aesKeyCiphertext,
+        nabuSessionToken
+      )
+      yield put(A.associateSofiUserSuccess(true))
+      yield call(redirectAfterAssociation)
+
+      //TODO do we need to handle a success?
+    } catch (e) {
+      yield put(A.associateSofiUserFailure(e))
+      yield put(actions.router.push('/sofi-error'))
+    }
+  }
+
   return {
+    associateSofiUserLogin,
+    associateSofiUserSignup,
+    authAndRouteToExchangeAction,
     clearSession,
+    createExchangeUser,
     createUser,
+    fetchSofiUserStatus,
     fetchTiers,
     fetchUser,
     fetchUserCampaigns,
+    fetchUserRiskSettings,
     generateAuthCredentials,
+    generateExchangeAuthCredentials,
     generateRetailToken,
     getCampaignData,
+    initiateSofiLanding,
     isTier2,
     linkFromExchangeAccount,
     linkToExchangeAccount,
+    migrateSofiUser,
     recoverUser,
+    redirectAfterAssociation,
     renewApiSockets,
     renewSession,
     renewUser,

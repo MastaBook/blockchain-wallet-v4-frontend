@@ -1,16 +1,15 @@
-import moment from 'moment'
+import { format, getTime } from 'date-fns'
 import { concat, flatten, indexBy, length, map, path, prop, replace } from 'ramda'
 import { call, put, select, take } from 'redux-saga/effects'
 
 import { APIType } from '@core/network/api'
 import { ProcessedTxType } from '@core/transactions/types'
-import { FetchCustodialOrdersAndTransactionsReturnType, HDAccountList, Wallet } from '@core/types'
+import { FetchCustodialOrdersAndTransactionsReturnType, Wallet } from '@core/types'
 
 import Remote from '../../../remote'
 import * as transactions from '../../../transactions'
 import { errorHandler, MISSING_WALLET } from '../../../utils'
 import { getAddressLabels } from '../../kvStore/btc/selectors'
-import { getLockboxBtcAccounts } from '../../kvStore/lockbox/selectors'
 import * as selectors from '../../selectors'
 import * as walletSelectors from '../../wallet/selectors'
 import custodialSagas from '../custodial/sagas'
@@ -40,12 +39,64 @@ export default ({ api }: { api: APIType }) => {
       yield put(A.fetchDataFailure(errorHandler(e)))
     }
   }
-
-  const watchTransactions = function* () {
-    while (true) {
-      const action = yield take(AT.FETCH_BTC_TRANSACTIONS)
-      yield call(fetchTransactions, action)
+  const fetchTransactionHistory = function* ({ payload }) {
+    const { address, end, start } = payload
+    const bech32Address = Array.isArray(address)
+      ? address.find((add) => prop('type', add) === 'bech32')
+      : address
+    const legacyAddress = Array.isArray(address)
+      ? address.find((add) => prop('type', add) === 'legacy')
+      : address
+    const startDate = format(new Date(start), 'dd/MM/yyyy')
+    const endDate = format(new Date(end), 'dd/MM/yyyy')
+    try {
+      yield put(A.fetchTransactionHistoryLoading())
+      const currency = yield select(selectors.settings.getCurrency)
+      if (address) {
+        const data = yield call(
+          api.getBtcTransactionHistory,
+          prop('address', legacyAddress),
+          prop('address', bech32Address),
+          currency.getOrElse('USD'),
+          startDate,
+          endDate
+        )
+        yield put(A.fetchTransactionHistorySuccess(data))
+      } else {
+        const context = yield select(S.getContext)
+        const active = context.join('|')
+        const data = yield call(
+          api.getBtcTransactionHistory,
+          active,
+          undefined,
+          currency.getOrElse('USD'),
+          startDate,
+          endDate
+        )
+        yield put(A.fetchTransactionHistorySuccess(data))
+      }
+    } catch (e) {
+      yield put(A.fetchTransactionHistoryFailure(e.message))
     }
+  }
+
+  const __processTxs = function* (txs) {
+    // Page == Remote ([Tx])
+    // Remote(wallet)
+    const wallet = yield select(walletSelectors.getWallet)
+    const walletR = Remote.of(wallet)
+    const addressLabels = (yield select(getAddressLabels)).getOrElse({})
+    const txNotes = Wallet.selectTxNotes(wallet)
+
+    // transformTx :: wallet -> Tx
+    // ProcessPage :: wallet -> [Tx] -> [Tx]
+    const ProcessTxs = (wallet, txList, txNotes, addressLabels) =>
+      map(
+        transformTx.bind(undefined, wallet.getOrFail(MISSING_WALLET), [], txNotes, addressLabels),
+        txList
+      )
+    // ProcessRemotePage :: Page -> Page
+    return ProcessTxs(walletR, txs, txNotes, addressLabels)
   }
 
   const fetchTransactions = function* (action) {
@@ -85,7 +136,7 @@ export default ({ api }: { api: APIType }) => {
         reset ? null : nextBSTransactionsURL
       )
       const page = flatten([txPage, custodialPage.orders]).sort((a, b) => {
-        return moment(b.insertedAt).valueOf() - moment(a.insertedAt).valueOf()
+        return getTime(new Date(b.insertedAt)) - getTime(new Date(a.insertedAt))
       })
       yield put(A.fetchTransactionsSuccess(page, reset))
     } catch (e) {
@@ -93,70 +144,11 @@ export default ({ api }: { api: APIType }) => {
     }
   }
 
-  const fetchTransactionHistory = function* ({ payload }) {
-    const { address, end, start } = payload
-    const bech32Address = address.find((add) => prop('type', add) === 'bech32')
-    const legacyAddress = address.find((add) => prop('type', add) === 'legacy')
-    const startDate = moment(start).format('DD/MM/YYYY')
-    const endDate = moment(end).format('DD/MM/YYYY')
-    try {
-      yield put(A.fetchTransactionHistoryLoading())
-      const currency = yield select(selectors.settings.getCurrency)
-      if (address) {
-        const data = yield call(
-          api.getBtcTransactionHistory,
-          prop('address', legacyAddress),
-          prop('address', bech32Address),
-          currency.getOrElse('USD'),
-          startDate,
-          endDate
-        )
-        yield put(A.fetchTransactionHistorySuccess(data))
-      } else {
-        const context = yield select(S.getContext)
-        const active = context.join('|')
-        const data = yield call(
-          api.getBtcTransactionHistory,
-          active,
-          undefined,
-          currency.getOrElse('USD'),
-          startDate,
-          endDate
-        )
-        yield put(A.fetchTransactionHistorySuccess(data))
-      }
-    } catch (e) {
-      yield put(A.fetchTransactionHistoryFailure(e.message))
+  const watchTransactions = function* () {
+    while (true) {
+      const action = yield take(AT.FETCH_BTC_TRANSACTIONS)
+      yield call(fetchTransactions, action)
     }
-  }
-
-  const __processTxs = function* (txs) {
-    // Page == Remote ([Tx])
-    // Remote(wallet)
-    const wallet = yield select(walletSelectors.getWallet)
-    const walletR = Remote.of(wallet)
-    // Remote(lockboxXpubs)
-    const accountListR = (yield select(getLockboxBtcAccounts))
-      .map(HDAccountList.fromJS)
-      .getOrElse([])
-    const addressLabels = (yield select(getAddressLabels)).getOrElse({})
-    const txNotes = Wallet.selectTxNotes(wallet)
-
-    // transformTx :: wallet -> Tx
-    // ProcessPage :: wallet -> [Tx] -> [Tx]
-    const ProcessTxs = (wallet, accountList, txList, txNotes, addressLabels) =>
-      map(
-        transformTx.bind(
-          undefined,
-          wallet.getOrFail(MISSING_WALLET),
-          accountList,
-          txNotes,
-          addressLabels
-        ),
-        txList
-      )
-    // ProcessRemotePage :: Page -> Page
-    return ProcessTxs(walletR, accountListR, txs, txNotes, addressLabels)
   }
 
   const fetchFiatAtTime = function* (action) {

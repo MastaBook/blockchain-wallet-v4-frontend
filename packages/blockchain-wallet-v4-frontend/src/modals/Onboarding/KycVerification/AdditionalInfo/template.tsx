@@ -1,11 +1,14 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { FormattedMessage } from 'react-intl'
 import styled from 'styled-components'
 
 import { Button, Icon, Text } from 'blockchain-info-components'
 import { FlyoutWrapper } from 'components/Flyout'
+import { Analytics } from 'data/types'
 
+import { IconsContainer, Title } from '../../../components'
 import { Props } from '.'
+import { DocsAllowedByCountry } from './model'
 
 const Wrapper = styled.div`
   width: 100%;
@@ -29,8 +32,7 @@ const MainContent = styled(FlyoutWrapper)`
 const Requirements = styled.div`
   display: flex;
   flex-direction: column;
-  margin-top: 28px;
-  border-top: 1px solid ${(props) => props.theme.grey000};
+  padding: 40px;
 `
 const ContentTop = styled.div`
   display: flex;
@@ -38,8 +40,11 @@ const ContentTop = styled.div`
   flex: 1;
 `
 const ContentItem = styled.div`
-  border-bottom: 1px solid ${(props) => props.theme.grey000};
-  padding: 28px 250px 28px 40px;
+  padding: 20px;
+  border: 1px solid #f0f2f7;
+  box-sizing: border-box;
+  border-radius: 8px;
+  margin-bottom: 8px;
 `
 
 const ContentFooter = styled.div`
@@ -47,10 +52,6 @@ const ContentFooter = styled.div`
   flex-direction: column;
 `
 
-const LeftTopCol = styled.div`
-  display: flex;
-  align-items: center;
-`
 const BannerContainer = styled.div`
   display: flex;
   flex-direction: row;
@@ -60,29 +61,76 @@ const BannerContainer = styled.div`
   padding: 16px;
 `
 
+const CloseIconContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: ${(props) => props.theme.grey000};
+  backdrop-filter: blur(54.3656px);
+  > span {
+    justify-content: center;
+  }
+`
+
 const AdditionalInfo: React.FC<Props> = (props) => {
+  useEffect(() => {
+    props.analyticsActions.trackEvent({
+      key: Analytics.ONBOARDING_PRE_VERIFICATION_VIEWED,
+      properties: {}
+    })
+  }, [])
+
+  const onClose = () => {
+    props.onClose()
+    props.analyticsActions.trackEvent({
+      key: Analytics.ONBOARDING_PRE_VERIFICATION_DISMISSED,
+      properties: {}
+    })
+  }
+
+  const onStartVerification = () => {
+    props.goToNextStep()
+    props.analyticsActions.trackEvent({
+      key: Analytics.ONBOARDING_PRE_VERIFICATION_DISMISSED,
+      properties: {}
+    })
+  }
+
+  const userCountry = props.userData?.address?.country || 'default'
+  const requirementsDocs = DocsAllowedByCountry(userCountry)
+
   return (
     <Wrapper>
       <FlyoutWrapper style={{ borderBottom: 'grey000', paddingBottom: '0px' }}>
         <TopText color='grey800' size='20px' weight={600}>
-          <LeftTopCol>
-            <Icon
-              cursor
-              data-e2e='kycAdditionalInfoBackButton'
-              name='arrow-left'
-              size='20px'
-              color='grey600'
-              role='button'
-              style={{ marginRight: '8px' }}
-              onClick={props.closeAllModals}
-            />
-            <FormattedMessage
-              id='modals.kycverification.additionalinfo.title'
-              defaultMessage='Additional Information Required'
-            />
-          </LeftTopCol>
+          <IconsContainer>
+            <Title color='textBlack'>
+              <FormattedMessage id='scenes.interest.verifyid' defaultMessage='Upgrade Now' />
+            </Title>
+            <CloseIconContainer>
+              <Icon
+                cursor
+                data-e2e='tradingLimitsCloseButton'
+                name='close'
+                size='20px'
+                color='grey600'
+                role='button'
+                onClick={onClose}
+              />
+            </CloseIconContainer>
+          </IconsContainer>
         </TopText>
-        <Text color='grey600' weight={500}>
+        <Icon name='user' size='32px' color='blue600' />
+        <Title color='textBlack' size='24px' weight={600} style={{ marginTop: '18px' }}>
+          <FormattedMessage
+            id='modals.kycverification.additionalinfo.title'
+            defaultMessage='Great, Now We Just Need To Confirm Your Identity.'
+          />
+        </Title>
+        <Text color='grey600' weight={500} size='16px'>
           <FormattedMessage
             id='modals.kycverification.additionalinfo.description'
             defaultMessage='We need to confirm your identity with a government issued ID and selfie. Before proceeding, make sure you have one of the following forms of ID handy and your camera is turned on.'
@@ -90,32 +138,36 @@ const AdditionalInfo: React.FC<Props> = (props) => {
         </Text>
       </FlyoutWrapper>
       <Requirements>
-        <ContentItem>
-          <Text color='grey800' weight={600}>
-            <FormattedMessage
-              id='modals.kycverification.additionalinfo.requirement_1'
-              defaultMessage='Government Issued ID'
-            />
-          </Text>
-        </ContentItem>
-
-        <ContentItem>
-          <Text color='grey800' weight={600}>
-            <FormattedMessage
-              id='modals.kycverification.additionalinfo.requirement_2'
-              defaultMessage='Valid Driver’s License'
-            />
-          </Text>
-        </ContentItem>
-
-        <ContentItem>
-          <Text color='grey800' weight={600}>
-            <FormattedMessage
-              id='modals.kycverification.additionalinfo.requirement_3'
-              defaultMessage='National Identity Card'
-            />
-          </Text>
-        </ContentItem>
+        {requirementsDocs.includes('requirement_1') && (
+          <ContentItem>
+            <Text color='grey800' weight={600}>
+              <FormattedMessage
+                id='modals.kycverification.additionalinfo.requirement_1'
+                defaultMessage='Government Issued ID'
+              />
+            </Text>
+          </ContentItem>
+        )}
+        {requirementsDocs.includes('requirement_2') && (
+          <ContentItem>
+            <Text color='grey800' weight={600}>
+              <FormattedMessage
+                id='modals.kycverification.additionalinfo.requirement_2'
+                defaultMessage='Valid Driver’s License'
+              />
+            </Text>
+          </ContentItem>
+        )}
+        {requirementsDocs.includes('requirement_3') && (
+          <ContentItem>
+            <Text color='grey800' weight={600}>
+              <FormattedMessage
+                id='modals.kycverification.additionalinfo.requirement_3'
+                defaultMessage='National Identity Card'
+              />
+            </Text>
+          </ContentItem>
+        )}
       </Requirements>
       <MainContent style={{ paddingTop: '40px' }}>
         <ContentTop>
@@ -148,10 +200,13 @@ const AdditionalInfo: React.FC<Props> = (props) => {
             size='16px'
             nature='primary'
             type='submit'
-            onClick={props.goToNextStep}
+            onClick={onStartVerification}
             fullwidth
           >
-            <FormattedMessage id='buttons.next' defaultMessage='Next' />
+            <FormattedMessage
+              id='modals.kycverification.additionalinfo.start_verification'
+              defaultMessage='Start Verification'
+            />
           </Button>
         </ContentFooter>
       </MainContent>

@@ -1,23 +1,21 @@
-import { concat, curry, path, prop } from 'ramda'
+import { path, prop } from 'ramda'
 
 import Remote from '../../../remote'
 import { createDeepEqualSelector } from '../../../utils'
 import * as kvStoreSelectors from '../../kvStore/eth/selectors'
-import { getLockboxEthContext } from '../../kvStore/lockbox/selectors'
 import { dataPath } from '../../paths'
 
 //
 // ETH
 //
 export const getContext = createDeepEqualSelector(
-  [kvStoreSelectors.getContext, getLockboxEthContext],
-  (walletContextR, lockboxContextR) => {
-    const walletContext = walletContextR.map((x) => x).getOrElse([])
-    const lockboxContext = lockboxContextR.map((x) => x).getOrElse([])
-    return concat([walletContext], lockboxContext)
+  [kvStoreSelectors.getContext],
+  (walletContextR) => {
+    return walletContextR.map((x) => x).getOrElse([])
   }
 )
 export const getAddresses = path([dataPath, 'eth', 'addresses'])
+export const getLatestBlock = path([dataPath, 'eth', 'latest_block'])
 export const getFee = path([dataPath, 'eth', 'fee'])
 export const getFeeRegular = (state) => getFee(state).map(prop('regular'))
 export const getFeePriority = (state) => getFee(state).map(prop('priority'))
@@ -31,7 +29,7 @@ export const getDefaultAddressBalance = (state) => {
   return getAddress(state, defaultAddr).map(prop('balance'))
 }
 export const getLegacyBalance = path([dataPath, 'eth', 'legacy_balance'])
-export const getHeight = path([dataPath, 'eth', 'latest_block'])
+export const getHeight = (state) => getLatestBlock(state).map(path(['number']))
 export const getNonce = (state, address) => getAddresses(state).map(path([address, 'nonce']))
 
 export const getBalance = (state) => {
@@ -58,9 +56,6 @@ export const getErc20Balance = (state, token) => {
 }
 export const getErc20CurrentBalance = (state, token) => {
   return path([dataPath, 'eth', 'current_balance', token])(state) || Remote.NotAsked
-}
-export const getErc20Coins = () => {
-  return Object.keys(window.coins).filter((coin) => window.coins[coin].coinfig.type.erc20Address)
 }
 export const getErc20Transactions = (state, token) => {
   return path([dataPath, 'eth', 'transactions', token])(state) || Remote.NotAsked

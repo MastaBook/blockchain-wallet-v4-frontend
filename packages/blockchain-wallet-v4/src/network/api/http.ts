@@ -5,7 +5,7 @@ import { merge, mergeRight, path, pathOr, prop } from 'ramda'
 axios.defaults.withCredentials = false
 axios.defaults.timeout = Infinity
 
-interface RequestConfig extends AxiosRequestConfig {
+export interface RequestConfig extends AxiosRequestConfig {
   contentType?: string
   endPoint?: string
   ignoreQueryParams?: boolean
@@ -41,11 +41,16 @@ export default ({ apiKey }: { apiKey: string }): HTTPService => {
     return allData
   }
 
-  const getHeaders = (contentType: string, sessionToken?: string) => {
+  const getHeaders = (contentType: string, sessionToken?: string, url?: string) => {
     const headers: Header = {
       'Content-Type': contentType
     }
     if (sessionToken) headers.Authorization = `Bearer ${sessionToken}`
+
+    const xSessionId = sessionStorage.getItem('xSessionId')
+    if (xSessionId && url?.includes('nabu-gateway')) {
+      headers['X-Session-ID'] = xSessionId
+    }
 
     return headers
   }
@@ -66,7 +71,7 @@ export default ({ apiKey }: { apiKey: string }): HTTPService => {
       .request<T>({
         cancelToken,
         data: encodeData(data, contentType, removeDefaultPostData),
-        headers: mergeRight(getHeaders(contentType, sessionToken), headers),
+        headers: mergeRight(getHeaders(contentType, sessionToken, url), headers),
         method,
         url: `${url}${endPoint}`,
         ...options
@@ -74,8 +79,11 @@ export default ({ apiKey }: { apiKey: string }): HTTPService => {
       .catch((error) => {
         const errorData = pathOr({}, ['response', 'data'], error)
         const status = path(['response', 'status'], error)
+
         if (typeof errorData === 'string') throw errorData
-        throw merge(errorData, { status })
+        if (typeof status === 'number') throw merge(errorData, { status })
+
+        return Promise.reject(error)
       })
       .then(prop('data'))
   }

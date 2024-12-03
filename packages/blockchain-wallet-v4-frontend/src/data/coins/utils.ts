@@ -1,6 +1,18 @@
-import { BSBalanceType, CoinType, InterestBalanceType } from '@core/types'
+import { BSBalanceType, CoinType, EarnBalanceType } from '@core/types'
 import { convertStandardToBase } from 'data/components/exchange/services'
 import { SwapAccountType, SwapBaseCounterTypes } from 'data/types'
+
+export const generateSelfCustodyAccount = (coin: CoinType, balance: string): SwapAccountType[] => {
+  return [
+    {
+      balance,
+      baseCoin: coin,
+      coin,
+      label: 'DeFi Wallet',
+      type: SwapBaseCounterTypes.ACCOUNT
+    }
+  ]
+}
 
 export const generateTradingAccount = (
   coin: CoinType,
@@ -20,7 +32,7 @@ export const generateTradingAccount = (
 
 export const generateInterestAccount = (
   coin: CoinType,
-  interestBalance?: InterestBalanceType
+  interestBalance?: EarnBalanceType
 ): SwapAccountType[] => {
   const { coinfig } = window.coins[coin]
   return [

@@ -4,7 +4,7 @@ import PropTypes from 'prop-types'
 import styled from 'styled-components'
 
 import { Modal, ModalBody, ModalHeader } from 'blockchain-info-components'
-import Announcements from 'components/Announcements'
+import { ServiceAnnouncement } from 'components/Announcements'
 
 const SendHeader = styled(ModalHeader)`
   border-bottom: 0;
@@ -15,11 +15,11 @@ const SendHeader = styled(ModalHeader)`
 `
 
 const SendBch = (props) => (
-  <Modal size='medium' position={props.position} total={props.total}>
+  <Modal size='large' position={props.position} total={props.total}>
     <SendHeader icon='send' onClose={props.closeAll}>
       <FormattedMessage id='modals.sendbch.title' defaultMessage='Send Bitcoin Cash' />
     </SendHeader>
-    <Announcements type='service' alertArea='send' currentCoin='BCH' />
+    <ServiceAnnouncement alertArea='send' currentCoin='BCH' />
     <ModalBody>{props.children}</ModalBody>
   </Modal>
 )

@@ -1,6 +1,10 @@
 import React, { ReactElement } from 'react'
 import { FormattedMessage } from 'react-intl'
-import moment, { Moment } from 'moment'
+import {
+  CARD_TYPES,
+  DEFAULT_CARD_SVG_LOGO
+} from 'blockchain-wallet-v4-frontend/src/modals/BuySell/PaymentMethods/model'
+import { addWeeks, format, isToday } from 'date-fns'
 import styled, { css } from 'styled-components'
 
 import { fiatToString } from '@core/exchange/utils'
@@ -13,7 +17,8 @@ import {
   NabuSymbolNumberType,
   WalletCurrencyType
 } from '@core/types'
-import { Icon, Image, Text } from 'blockchain-info-components'
+import { Coin } from '@core/utils'
+import { Icon, Image, Link, Text } from 'blockchain-info-components'
 import {
   Content,
   DisplayContainer,
@@ -23,11 +28,13 @@ import {
 } from 'components/BuySell'
 import { GreyCartridge, OrangeCartridge, SuccessCartridge } from 'components/Cartridge'
 import CoinDisplay from 'components/Display/CoinDisplay'
-import { CARD_TYPES, DEFAULT_CARD_SVG_LOGO } from 'components/Form/CreditCardBox/model'
+import { Padding } from 'components/Padding'
+import { Tag } from 'components/Tag'
 import { convertBaseToStandard } from 'data/components/exchange/services'
 import {
   ActionEnum,
   BankDetails,
+  BankStatusType,
   BankTransferAccountType,
   BrokerageOrderType,
   RecurringBuyPeriods
@@ -49,14 +56,6 @@ const Title = styled(Text)<{ asValue?: boolean }>`
   margin-top: ${(props) => (props.asValue ? '4px' : '0px')};
 `
 
-const Row = styled.div`
-  padding: 16px 40px;
-  box-sizing: border-box;
-  border-top: 1px solid ${(props) => props.theme.grey000};
-  &:last-child {
-    border-bottom: 1px solid ${(props) => props.theme.grey000};
-  }
-`
 const Col = styled.div`
   display: flex;
   align-items: center;
@@ -78,7 +77,200 @@ const DisablableIcon = styled(Icon)<{
     `}
 `
 
-const getDefaultMethod = (defaultMethod, bankAccounts: BankTransferAccountType[]) => {
+const getAddBankStatusText = (bankStatus: BankStatusType) => {
+  let image: string
+  let title: React.ReactNode
+  let text: React.ReactNode
+  switch (bankStatus) {
+    case BankStatusType.BANK_TRANSFER_ACCOUNT_EXPIRED:
+    case BankStatusType.BANK_TRANSFER_ACCOUNT_REJECTED:
+      image = 'bank-rejected'
+      break
+    case BankStatusType.ACTIVE:
+      image = 'bank-success'
+      break
+    default:
+      image = 'bank-error'
+      break
+  }
+  switch (bankStatus) {
+    case BankStatusType.BANK_TRANSFER_ACCOUNT_ALREADY_LINKED:
+      title = (
+        <FormattedMessage
+          id='copy.bank_linked_error_title_already_linked'
+          defaultMessage='This account is already linked.'
+        />
+      )
+      break
+    case BankStatusType.ACTIVE:
+      title = <FormattedMessage id='copy.bank_linked.title' defaultMessage='Bank Linked!' />
+      break
+    case BankStatusType.BANK_TRANSFER_ACCOUNT_NOT_SUPPORTED:
+    case BankStatusType.BANK_TRANSFER_ACCOUNT_INVALID:
+      title = (
+        <FormattedMessage
+          id='copy.bank_link_current_account'
+          defaultMessage='Please link a Current Account.'
+        />
+      )
+      break
+    case BankStatusType.BANK_TRANSFER_ACCOUNT_INFO_NOT_FOUND:
+    case BankStatusType.BANK_TRANSFER_ACCOUNT_REJECTED_FRAUD:
+    case BankStatusType.BANK_TRANSFER_ACCOUNT_FAILED_INTERNAL:
+    case BankStatusType.BANK_TRANSFER_ACCOUNT_FAILED:
+      title = (
+        <FormattedMessage
+          id='copy.bank_linked_error_title_rejected_fraud'
+          defaultMessage='There was a problem linking your account.'
+        />
+      )
+      break
+    case BankStatusType.BANK_TRANSFER_ACCOUNT_NAME_MISMATCH:
+      title = (
+        <FormattedMessage
+          id='copy.bank_linked_error_title_yourbank'
+          defaultMessage='Is this your bank?'
+        />
+      )
+      break
+    case BankStatusType.BANK_TRANSFER_ACCOUNT_EXPIRED:
+      title = (
+        <FormattedMessage
+          id='copy.bank_linked_error_title_expiredaccount'
+          defaultMessage='We were unable to link your account.'
+        />
+      )
+      break
+    case BankStatusType.BANK_TRANSFER_ACCOUNT_REJECTED:
+      title = (
+        <FormattedMessage
+          id='copy.bank_linked_error_title_connectionrejected'
+          defaultMessage='Connection Rejected'
+        />
+      )
+      break
+    default:
+      title = (
+        <FormattedMessage
+          id='scenes.exchange.confirm.oopsheader'
+          defaultMessage='Oops! Something went wrong.'
+        />
+      )
+      break
+  }
+  switch (bankStatus) {
+    case BankStatusType.BANK_TRANSFER_ACCOUNT_ALREADY_LINKED:
+      text = (
+        <FormattedMessage
+          id='copy.bank_linked_error_alreadylinked1'
+          defaultMessage='We noticed this account is already linked to your Blockchain.com Account.'
+        />
+      )
+      break
+    case BankStatusType.ACTIVE:
+      text = (
+        <FormattedMessage
+          id='copy.bank_linked'
+          defaultMessage='Your bank account is now linked to your Blockchain.com Account'
+        />
+      )
+      break
+    case BankStatusType.BANK_TRANSFER_ACCOUNT_NOT_SUPPORTED:
+    case BankStatusType.BANK_TRANSFER_ACCOUNT_INVALID:
+      text = (
+        <FormattedMessage
+          id='copy.bank_link_current_account_extra_fees'
+          defaultMessage='Your bank may charge you extra fees if you buy crypto without a current account.'
+        />
+      )
+      break
+    case BankStatusType.BANK_TRANSFER_ACCOUNT_NAME_MISMATCH:
+      text = (
+        <>
+          <FormattedMessage
+            id='copy.bank_linked_error_yourbank'
+            defaultMessage='We noticed the names don’t match. The bank you link must have a matching legal first & last name as your Blockchain.com Account.'
+          />{' '}
+          <Link
+            size='16px'
+            weight={500}
+            target='_blank'
+            href='https://support.blockchain.com/hc/en-us/'
+          >
+            <FormattedMessage id='buttons.learn_more_arrow' defaultMessage='Learn more ->' />
+          </Link>
+        </>
+      )
+      break
+    case BankStatusType.BANK_TRANSFER_ACCOUNT_EXPIRED:
+      text = (
+        <FormattedMessage
+          id='copy.bank_linked_error_title_expiredaccount.desc'
+          defaultMessage='Please try connecting that bank account again or link any Visa or Mastercard'
+        />
+      )
+      break
+    case BankStatusType.BANK_TRANSFER_ACCOUNT_INFO_NOT_FOUND:
+    case BankStatusType.BANK_TRANSFER_ACCOUNT_REJECTED_FRAUD:
+    case BankStatusType.BANK_TRANSFER_ACCOUNT_FAILED_INTERNAL:
+    case BankStatusType.BANK_TRANSFER_ACCOUNT_FAILED:
+      text = (
+        <>
+          <FormattedMessage
+            id='copy.bank_linked_error_rejected_fraud'
+            defaultMessage='Please try again or select a different payment method.'
+          />
+        </>
+      )
+      break
+    case BankStatusType.BANK_TRANSFER_ACCOUNT_REJECTED:
+      text = (
+        <>
+          <FormattedMessage
+            id='copy.bank_linked_error_account_rejected'
+            defaultMessage="We believe you have declined linking your account. If this isn't correct, please"
+          />{' '}
+          <Link
+            size='16px'
+            weight={500}
+            target='_blank'
+            href='https://support.blockchain.com/hc/en-us/requests/new?ticket_form_id=360000190032'
+          >
+            <FormattedMessage id='copy.contact_support' defaultMessage='Contact Support' />
+          </Link>
+          .
+        </>
+      )
+      break
+    default:
+      text = (
+        <>
+          <FormattedMessage
+            id='copy.bank_linked_error'
+            defaultMessage='Please try linking your bank again. If this keeps happening, please'
+          />{' '}
+          <Link
+            size='16px'
+            weight={500}
+            target='_blank'
+            href='https://support.blockchain.com/hc/en-us/'
+          >
+            <FormattedMessage id='buttons.contact_support' defaultMessage='Contact Support' />
+          </Link>
+          .
+        </>
+      )
+      break
+  }
+  return { image, text, title }
+}
+
+const getDefaultMethod = (
+  defaultMethod,
+  bankAccounts: BankTransferAccountType[]
+):
+  | ({ type: BSPaymentTypes.BANK_TRANSFER } & (BankTransferAccountType | BeneficiaryType))
+  | undefined => {
   if (defaultMethod) {
     return { ...defaultMethod, type: BSPaymentTypes.BANK_TRANSFER }
   }
@@ -131,24 +323,24 @@ const getPeriodSubTitleText = (
   date: string | number = Date.now()
 ): React.ReactNode => {
   let text
-  const startDate = moment(date)
+  const startDate = new Date(date)
   switch (period) {
     default:
     case RecurringBuyPeriods.DAILY:
       text = <></>
       break
     case RecurringBuyPeriods.WEEKLY:
-      text = <>On {startDate.format('dddd')}s</>
+      text = <>On {format(startDate, 'EEEE')}s</>
       break
     case RecurringBuyPeriods.BI_WEEKLY:
       text = (
         <>
-          On the {startDate.format('Do')} and {startDate.add(2, 'weeks').format('Do')}
+          On the {format(startDate, 'do')} and {format(addWeeks(startDate, 2), 'do')}
         </>
       )
       break
     case RecurringBuyPeriods.MONTHLY:
-      text = <>On the {startDate.format('Do')}</>
+      text = <>On the {format(startDate, 'do')}</>
       break
   }
   return text
@@ -159,14 +351,14 @@ const getPeriodForSuccess = (
   date: string | number = Date.now()
 ): React.ReactNode => {
   let text
-  const startDate = moment(date)
+  const startDate = new Date(date)
   switch (period) {
     default:
     case RecurringBuyPeriods.DAILY:
       text = <>every day</>
       break
     case RecurringBuyPeriods.WEEKLY:
-      text = <>every {startDate.format('dddd')}</>
+      text = <>every {format(startDate, 'EEEE')}</>
       break
     case RecurringBuyPeriods.BI_WEEKLY:
       text = (
@@ -211,20 +403,21 @@ const getPeriodText = (period: RecurringBuyPeriods): React.ReactNode => {
 
 const getActionText = (action: ActionEnum, nextDate: string | number) => {
   let text
-  let isToday = false
-  let date: Moment | string = moment()
+  let isTimeToday = false
+  let date = new Date()
 
   if (nextDate) {
-    isToday = moment(nextDate).calendar().startsWith('Today')
-    date = moment(nextDate)
+    isTimeToday = isToday(new Date(nextDate))
+    date = new Date(nextDate)
   }
 
-  date = date.format('ddd, MMMM Do')
+  // @ts-ignore
+  date = format(date, 'EEE, MMMM do')
 
   switch (action) {
     default:
     case ActionEnum.BUY:
-      text = isToday ? (
+      text = isTimeToday ? (
         <FormattedMessage
           id='scenes.coin.recurringbuy.next_buy_is_today'
           defaultMessage='Next Buy is Today'
@@ -392,74 +585,132 @@ const renderBankFullName = (
 const renderBankSubText = (
   value: BSPaymentMethodType | BankTransferAccountType | BeneficiaryType
 ): string | ReactElement => {
+  if ('limits' in value) {
+    const { currency, limits } = value
+
+    return (
+      <FormattedMessage
+        id='modals.simplebuy.bank_item_with_limits'
+        defaultMessage='{limitAmount} Limit'
+        values={{
+          limitAmount: fiatToString({
+            unit: currency,
+            value: convertBaseToStandard(Coin.FIAT, limits.max)
+          })
+        }}
+      />
+    )
+  }
   if ('agent' in value) {
     // BeneficiaryType
     return value.address
   }
   if ('details' in value && value.details?.bankAccountType) {
+    const { details } = value
     // BankTransferAccountType | BSPaymentMethodType
-    return `${value.details?.bankAccountType?.toLowerCase() || ''} account ${
-      value.details?.accountNumber || ''
-    }`
+    return `${details.bankAccountType?.toLowerCase() || ''} account ${details.accountNumber || ''}`
   }
   return <></>
 }
 
 const renderBank = (value: BSPaymentMethodType | BankTransferAccountType | BeneficiaryType) => (
   <>
-    <DisplayValue>{renderBankText(value)}</DisplayValue>
+    <DisplayValue
+      style={{
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap'
+      }}
+    >
+      {renderBankText(value)}
+    </DisplayValue>
     <DisplayTitle>{renderBankSubText(value)}</DisplayTitle>
   </>
 )
 
 const renderCardText = (value: BSPaymentMethodType): string => {
-  return value.card
-    ? value.card.label
-      ? value.card.label.toLowerCase()
-      : value.card.type
-    : 'Credit or Debit Card'
+  const { card } = value
+
+  if (card) {
+    const { label, number } = card
+
+    if (number) {
+      return `****${number}`
+    }
+
+    if (label) {
+      return label.toLocaleLowerCase()
+    }
+  }
+
+  return 'Credit or Debit Card'
+}
+
+const renderCardSubtitle = (value: BSPaymentMethodType) => {
+  if (value.limits) {
+    return (
+      <FormattedMessage
+        id='modals.simplebuy.card_limits'
+        defaultMessage='{limitAmount} Limit'
+        values={{
+          limitAmount: fiatToString({
+            unit: value.currency,
+            value: convertBaseToStandard(Coin.FIAT, value.limits.max)
+          })
+        }}
+      />
+    )
+  }
+
+  if (value.card) {
+    return (
+      <FormattedMessage
+        id='modals.simplebuy.card_ending_in'
+        defaultMessage='Card Ending in {lastFour}'
+        values={{
+          lastFour: value.card.number
+        }}
+      />
+    )
+  }
+
+  return (
+    <FormattedMessage id='modals.simplebuy.paymentcard' defaultMessage='Credit or Debit Card' />
+  )
 }
 
 const renderCard = (value: BSPaymentMethodType) => (
   <>
     <DisplayValue capitalize>{renderCardText(value)}</DisplayValue>
-    <DisplayTitle>
-      {value.card ? (
-        <FormattedMessage
-          id='modals.simplebuy.card_ending_in'
-          defaultMessage='Card Ending in {lastFour}'
-          values={{
-            lastFour: value.card.number
-          }}
-        />
-      ) : (
-        <FormattedMessage id='modals.simplebuy.paymentcard' defaultMessage='Credit or Debit Card' />
-      )}
-    </DisplayTitle>
+    <DisplayTitle>{renderCardSubtitle(value)}</DisplayTitle>
+    {value.block === false && !!value.ux?.title && (
+      <Padding top={8}>
+        <Tag variant='warning'>{value.ux?.title}</Tag>
+      </Padding>
+    )}
   </>
 )
 
-const renderFund = (value: BSPaymentMethodType, sbBalances: BSBalancesType) => (
-  <>
-    <DisplayValue>{value.currency}</DisplayValue>
-    <DisplayTitle>
-      {fiatToString({
-        unit: value.currency as FiatType,
-        value: convertBaseToStandard('FIAT', sbBalances[value.currency]?.available || '0')
-      })}{' '}
-      <FormattedMessage id='copy.available' defaultMessage='Available' />
-    </DisplayTitle>
-  </>
-)
+const renderFund = (value: BSPaymentMethodType, sbBalances: BSBalancesType) => {
+  const { currency } = value
 
-const getIcon = (
-  method: BSPaymentMethodType | undefined,
-  isSddFlow = false,
-  disabled?: boolean
-): ReactElement => {
-  if (isSddFlow && !method) {
-    return <DisablableIcon disabled={disabled} size='18px' color='blue600' name='credit-card-sb' />
-  }
+  const displayValue = window.coins[currency]?.coinfig.name ?? currency
+
+  return (
+    <>
+      <DisplayValue>{displayValue}</DisplayValue>
+      <DisplayTitle>
+        {fiatToString({
+          unit: currency,
+          value: convertBaseToStandard('FIAT', sbBalances[currency]?.available || '0')
+        })}{' '}
+        <FormattedMessage id='copy.available' defaultMessage='Available' />
+      </DisplayTitle>
+    </>
+  )
+}
+
+const getIcon = (method: BSPaymentMethodType | undefined, disabled?: boolean): ReactElement => {
   if (!method) {
     return (
       <DisablableIcon
@@ -491,6 +742,7 @@ const getIcon = (
       return <Image name={getBankLogoImageName(method.details?.bankName)} height='48px' />
     case BSPaymentTypes.BANK_ACCOUNT:
       return <Icon name='bank-filled' color='blue600' />
+
     default:
       return <></>
   }
@@ -510,19 +762,8 @@ const getBankText = (method?: BSPaymentMethodType | BankTransferAccountType | Be
 
 const getText = (
   method: BSPaymentMethodType | undefined,
-  sbBalances: BSBalancesType,
-  isSddFlow = false
+  sbBalances: BSBalancesType
 ): ReactElement => {
-  if (isSddFlow && !method) {
-    return (
-      <Text weight={600} color='grey900' style={{ paddingBottom: '3px', paddingTop: '4px' }}>
-        <FormattedMessage
-          id='modals.simplebuy.confirm.credit_or_debit'
-          defaultMessage='Credit or Debit Card'
-        />
-      </Text>
-    )
-  }
   if (!method) {
     return (
       <Text weight={600} color='grey900' style={{ paddingBottom: '3px', paddingTop: '4px' }}>
@@ -607,15 +848,17 @@ type BankProps = {
   bankDetails: BankDetails
   icon: ReactElement
   isActive: boolean
+  isDisabled?: boolean
   onClick: () => void
   text: string
 }
 
-const Bank = ({ bankDetails, icon, isActive, onClick, text }: BankProps) => (
+const Bank = ({ bankDetails, icon, isActive, isDisabled = false, onClick, text }: BankProps) => (
   <DisplayContainer
     data-e2e={`sb${bankDetails?.bankAccountType?.toLowerCase()}Banks`}
     role='button'
-    onClick={onClick}
+    onClick={!isDisabled ? onClick : undefined}
+    isDisabled={isDisabled}
   >
     <DisplayIcon>{icon}</DisplayIcon>
     <MultiRowContainer>
@@ -659,7 +902,7 @@ const BankWire = ({
     <Col style={{ width: '100%' }}>
       <Content>
         <Value asTitle>{beneficiary.name}</Value>
-        <Title asValue>{beneficiary.agent.account}</Title>
+        <Title asValue>Wire Account ending in {beneficiary.address.slice(-4)}</Title>
 
         {type === 'DEPOSIT' && (
           <CartridgeContainer>
@@ -722,21 +965,28 @@ type WithdrawalBrokerageLimits = {
   withdrawableBalance?: string
 }
 const getBrokerageLimits = (props: DepositBrokerageLimits | WithdrawalBrokerageLimits) => {
-  return props.orderType === BrokerageOrderType.DEPOSIT
-    ? props.paymentMethod.limits
-    : props.orderType === BrokerageOrderType.WITHDRAW &&
-      props.withdrawableBalance &&
-      props.minWithdrawAmount
-    ? {
-        max: (Number(props.withdrawableBalance) - Number(props.fee || '0')).toString(),
-        min: props.minWithdrawAmount
-      }
-    : { max: '0', min: '0' }
+  if (props.orderType === BrokerageOrderType.DEPOSIT) {
+    return props.paymentMethod.limits
+  }
+
+  if (
+    props.orderType === BrokerageOrderType.WITHDRAW &&
+    props.withdrawableBalance &&
+    props.minWithdrawAmount
+  ) {
+    const totalWithdrawable = Number(props.withdrawableBalance) - Number(props.fee ?? 0)
+
+    return {
+      max: Math.max(totalWithdrawable, 0).toString(),
+      min: props.minWithdrawAmount
+    }
+  }
+
+  return { max: '0', min: '0' }
 }
 
 const normalizeAmount = (value, prevValue) => {
-  // eslint-disable-next-line no-restricted-globals
-  if (isNaN(Number(value)) && value !== '.' && value !== '') return prevValue
+  if (Number.isNaN(Number(value)) && value !== '.' && value !== '') return prevValue
   return formatTextAmount(value, true)
 }
 
@@ -749,6 +999,7 @@ export {
   DisplayTitle,
   DisplayValue,
   getActionText,
+  getAddBankStatusText,
   getBankText,
   getBrokerageLimits,
   getDefaultMethod,
@@ -770,7 +1021,6 @@ export {
   renderCardText,
   renderFund,
   RightArrowIcon,
-  Row,
   SectionTitle,
   Title,
   Value

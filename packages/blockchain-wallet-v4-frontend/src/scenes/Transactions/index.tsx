@@ -1,40 +1,34 @@
 import React from 'react'
 import { FormattedMessage } from 'react-intl'
 import { connect, ConnectedProps } from 'react-redux'
+import { RouteComponentProps } from 'react-router'
+import { NavLink } from 'react-router-dom'
 import { path, toLower } from 'ramda'
 import { bindActionCreators, compose, Dispatch } from 'redux'
 import { reduxForm } from 'redux-form'
 import styled from 'styled-components'
 
-import { Exchange } from '@core'
 import {
-  CoinfigType,
   CoinType,
+  EarnEligibleType,
   FiatType,
   OrderType,
   TimeRange,
-  WalletCurrencyType,
   WalletFiatType
 } from '@core/types'
 import { Button, Icon, Text } from 'blockchain-info-components'
-import { SavedRecurringBuy } from 'components/Box'
 import EmptyResults from 'components/EmptyResults'
 import { SceneWrapper } from 'components/Layout'
 import LazyLoadContainer from 'components/LazyLoadContainer'
 import { actions, model, selectors } from 'data'
 import { getIntroductionText } from 'data/coins/selectors'
-import { convertBaseToStandard } from 'data/components/exchange/services'
-import {
-  ActionEnum,
-  RecurringBuyOrigins,
-  RecurringBuyPeriods,
-  RecurringBuyRegisteredList,
-  RecurringBuyStepType
-} from 'data/types'
+import { Analytics } from 'data/types'
 import { media } from 'services/styles'
 
 import CoinIntroduction from './CoinIntroduction'
 import CoinPerformance from './CoinPerformance'
+import RecurringBuys from './RecurringBuys'
+import { RiskInvestment } from './RiskInvestment'
 import { getData } from './selectors'
 import TransactionFilters from './TransactionFilters'
 import TransactionList from './TransactionList'
@@ -44,8 +38,13 @@ import WalletBalanceDropdown from './WalletBalanceDropdown'
 const PageTitle = styled.div`
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+
+  ${media.mobile`
+    flex-direction: column;
+  `}
 `
+
 const CoinTitle = styled.div`
   display: flex;
   flex-direction: row;
@@ -58,6 +57,16 @@ const CoinTitle = styled.div`
 `
 const TitleActionContainer = styled.div`
   display: flex;
+
+  & > a {
+    text-decoration: none;
+    margin-right: 8px;
+  }
+
+  ${media.mobile`
+    margin-top: 8px;
+    width: 100%;
+  `}
 `
 const Header = styled.div`
   width: 100%;
@@ -67,19 +76,9 @@ const ExplainerWrapper = styled.div`
 `
 const StatsContainer = styled.div`
   display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  width: 100%;
   height: 120px;
   max-height: 120px;
   margin: 24px 0;
-
-  & > :first-child {
-    width: 320px;
-    min-width: 320px;
-    z-index: 2;
-    margin-right: 30px;
-  }
 
   ${media.laptop`
     height: auto;
@@ -87,12 +86,7 @@ const StatsContainer = styled.div`
     flex-direction: column;
     margin: 12px 0;
 
-    & > :first-child {
-      width: auto;
-      margin-right: 0px;
-    }
-
-    & > :last-child {
+    & > :not(:first-child) {
       margin-top: 12px;
     }
   `}
@@ -102,6 +96,16 @@ const ExplainerText = styled(Text)`
   font-size: 16px;
   font-weight: 500;
   color: ${(props) => props.theme.grey600};
+`
+
+const StyledButton = styled(Button)`
+  &:not(:last-child) {
+    margin-right: 8px;
+  }
+
+  ${media.mobile`
+    flex: 1;
+  `}
 `
 
 class TransactionsContainer extends React.PureComponent<Props> {
@@ -114,6 +118,12 @@ class TransactionsContainer extends React.PureComponent<Props> {
     )
     this.props.brokerageActions.fetchBankTransferAccounts()
     this.props.recurringBuyActions.fetchRegisteredList()
+    this.props.interestActions.fetchActiveRewardsEligible()
+    this.props.interestActions.fetchInterestEligible()
+    this.props.interestActions.fetchStakingEligible()
+    this.props.interestActions.fetchActiveRewardsRates()
+    this.props.interestActions.fetchInterestRates()
+    this.props.interestActions.fetchStakingRates()
   }
 
   componentDidUpdate(prevProps) {
@@ -128,28 +138,35 @@ class TransactionsContainer extends React.PureComponent<Props> {
   }
 
   handleArchive = (address) => {
-    // @ts-ignore
     if (this.props.setAddressArchived) this.props.setAddressArchived(address)
   }
 
   render() {
     const {
-      coin,
+      analyticsActions,
+      computedMatch,
       currency,
       hasTxResults,
+      interestEligible,
+      isGoldTier,
       isInvited,
-      isRecurringBuy,
       isSearchEntered,
       loadMoreTxs,
       pages,
-      recurringBuys,
-      sourceType
+      showRiskInvestments,
+      sourceType,
+      stakingEligible
     } = this.props
+    const { coin } = computedMatch.params
     const { coinfig } = window.coins[coin]
+    const interestEligibleCoin = interestEligible?.[coin]?.eligible
+    const stakingEligibleCoin = stakingEligible?.[coin]?.eligible
+    const isEarnButtonEnabled = isGoldTier && (interestEligibleCoin || stakingEligibleCoin)
+    const isEarnSourceType = sourceType === 'INTEREST' || sourceType === 'STAKING'
 
     return (
       <SceneWrapper>
-        <LazyLoadContainer onLazyLoad={loadMoreTxs}>
+        <LazyLoadContainer triggerDistance={200} onLazyLoad={loadMoreTxs}>
           <Header>
             <PageTitle>
               <CoinTitle>
@@ -165,26 +182,16 @@ class TransactionsContainer extends React.PureComponent<Props> {
               <TitleActionContainer>
                 {coinfig.type.name !== 'FIAT' && (
                   <>
-                    <Button
-                      nature='primary'
-                      data-e2e='sellCrypto'
-                      width='100px'
-                      style={{ marginRight: '8px' }}
-                      onClick={() => {
-                        this.props.buySellActions.showModal({
-                          cryptoCurrency: coin as CoinType,
-                          orderType: OrderType.SELL,
-                          origin: 'TransactionList'
-                        })
-                      }}
-                    >
-                      <FormattedMessage id='buttons.sell' defaultMessage='Sell' />
-                    </Button>
-                    <Button
+                    <StyledButton
                       nature='primary'
                       data-e2e='buyCrypto'
                       width='100px'
                       onClick={() => {
+                        this.props.analyticsActions.trackEvent({
+                          key: Analytics.COIN_VIEW_BUY_CLICKED,
+                          properties: {}
+                        })
+
                         this.props.buySellActions.showModal({
                           cryptoCurrency: coin as CoinType,
                           orderType: OrderType.BUY,
@@ -193,47 +200,84 @@ class TransactionsContainer extends React.PureComponent<Props> {
                       }}
                     >
                       <FormattedMessage id='buttons.buy' defaultMessage='Buy' />
-                    </Button>
+                    </StyledButton>
+                    {isEarnButtonEnabled && (
+                      <NavLink to='/earn' data-e2e='vistEarnPage'>
+                        <StyledButton
+                          width='100px'
+                          nature='primary'
+                          data-e2e='earnInterest'
+                          onClick={() => {
+                            analyticsActions.trackEvent({
+                              key: Analytics.COINVIEW_EARN_REWARDS_BUTTON_CLICKED,
+                              properties: {
+                                currency: coin,
+                                device: 'WEB',
+                                platform: 'WALLET'
+                              }
+                            })
+                          }}
+                        >
+                          <FormattedMessage
+                            id='scenes.interest.summarycard.earnOnly'
+                            defaultMessage='Earn'
+                          />
+                        </StyledButton>
+                      </NavLink>
+                    )}
+                    <StyledButton
+                      nature='light'
+                      data-e2e='sellCrypto'
+                      width='100px'
+                      onClick={() => {
+                        this.props.analyticsActions.trackEvent({
+                          key: Analytics.COIN_VIEW_SELL_CLICKED,
+                          properties: {}
+                        })
+
+                        this.props.buySellActions.showModal({
+                          cryptoCurrency: coin as CoinType,
+                          orderType: OrderType.SELL,
+                          origin: 'TransactionList'
+                        })
+                      }}
+                    >
+                      <FormattedMessage id='buttons.sell' defaultMessage='Sell' />
+                    </StyledButton>
                   </>
                 )}
                 {coinfig.type.name === 'FIAT' && (
                   <>
-                    {window.coins[coin].coinfig.type.name === 'FIAT' && (
-                      <Button
-                        nature='primary'
-                        data-e2e='depositFiat'
-                        style={{ minWidth: 'auto' }}
-                        onClick={() => {
-                          if (!this.props.brokerageActions) return
-                          if (!this.props.buySellActions) return
-                          if (isInvited || coin === 'USD') {
-                            this.props.brokerageActions.handleDepositFiatClick(
-                              coin as WalletFiatType
-                            )
-                          } else {
-                            this.props.buySellActions.handleDepositFiatClick({
-                              coin: coin as WalletFiatType,
-                              origin: 'TransactionList'
-                            })
-                          }
-                        }}
-                      >
-                        <FormattedMessage id='buttons.deposit' defaultMessage='Deposit' />
-                      </Button>
-                    )}
-                    {window.coins[coin].coinfig.type.name === 'FIAT' && (
-                      <Button
-                        nature='primary'
-                        data-e2e='withdrawFiat'
-                        style={{ marginLeft: '8px', minWidth: 'auto' }}
-                        onClick={() => {
-                          if (!this.props.brokerageActions) return
-                          this.props.brokerageActions.handleWithdrawClick(coin as WalletFiatType)
-                        }}
-                      >
-                        <FormattedMessage id='buttons.withdraw' defaultMessage='Withdraw' />
-                      </Button>
-                    )}
+                    <Button
+                      nature='primary'
+                      data-e2e='depositFiat'
+                      style={{ minWidth: 'auto' }}
+                      onClick={() => {
+                        if (!this.props.brokerageActions) return
+                        if (!this.props.buySellActions) return
+                        if (isInvited || coin === 'USD') {
+                          this.props.brokerageActions.handleDepositFiatClick(coin as WalletFiatType)
+                        } else {
+                          this.props.buySellActions.handleDepositFiatClick({
+                            coin: coin as WalletFiatType,
+                            origin: 'TransactionList'
+                          })
+                        }
+                      }}
+                    >
+                      <FormattedMessage id='buttons.deposit' defaultMessage='Deposit' />
+                    </Button>
+                    <Button
+                      nature='primary'
+                      data-e2e='withdrawFiat'
+                      style={{ marginLeft: '8px', minWidth: 'auto' }}
+                      onClick={() => {
+                        if (!this.props.brokerageActions) return
+                        this.props.brokerageActions.handleWithdrawClick(coin as WalletFiatType)
+                      }}
+                    >
+                      <FormattedMessage id='buttons.withdraw' defaultMessage='Withdraw' />
+                    </Button>
                   </>
                 )}
               </TitleActionContainer>
@@ -242,36 +286,11 @@ class TransactionsContainer extends React.PureComponent<Props> {
               <ExplainerText>{getIntroductionText(coin)}</ExplainerText>
             </ExplainerWrapper>
             <StatsContainer>
-              <WalletBalanceDropdown coin={coin} />
+              <WalletBalanceDropdown key={coin} coin={coin} />
               {coinfig.type.name !== 'FIAT' && <CoinPerformance coin={coin} />}
             </StatsContainer>
           </Header>
-          <div style={{ display: 'flex', flexFlow: 'row wrap', justifyContent: 'space-between' }}>
-            {isRecurringBuy &&
-              recurringBuys.map((recurringBuy) => (
-                <SavedRecurringBuy
-                  key={recurringBuy.id}
-                  action={'BUY' as ActionEnum}
-                  amount={`${Exchange.getSymbol(recurringBuy.inputCurrency)}${convertBaseToStandard(
-                    recurringBuy.inputCurrency,
-                    recurringBuy.inputValue
-                  )}`}
-                  coin={recurringBuy.destinationCurrency}
-                  nextPayment={recurringBuy.nextPayment}
-                  onClick={() => {
-                    this.props.recurringBuyActions.setActive(recurringBuy)
-                    this.props.recurringBuyActions.showModal({
-                      origin: RecurringBuyOrigins.COIN_PAGE
-                    })
-                    this.props.recurringBuyActions.setStep({
-                      origin: RecurringBuyOrigins.COIN_PAGE,
-                      step: RecurringBuyStepType.DETAILS
-                    })
-                  }}
-                  period={recurringBuy.period as RecurringBuyPeriods}
-                />
-              ))}
-          </div>
+          <RecurringBuys coin={coin as CoinType} />
           {(hasTxResults || isSearchEntered) && coinfig.type.name !== 'FIAT' && (
             <TransactionFilters coin={coin as CoinType} />
           )}
@@ -285,40 +304,45 @@ class TransactionsContainer extends React.PureComponent<Props> {
               <CoinIntroduction coin={coin as CoinType} />
             </SceneWrapper>
           )}
-          {hasTxResults && sourceType && sourceType === 'INTEREST' && <InterestTransactions />}
+          {hasTxResults && isEarnSourceType && <InterestTransactions sourceType={sourceType} />}
           {hasTxResults &&
-            (!sourceType || sourceType !== 'INTEREST') &&
-            pages.map((value) => (
+            (!sourceType || !isEarnSourceType) &&
+            pages.map((value, i) => (
               <TransactionList
                 coin={coin}
                 coinTicker={coinfig.symbol}
                 currency={currency}
                 data={value}
-                key={coinfig.symbol}
+                // eslint-disable-next-line react/no-array-index-key
+                key={`${coin}${i}`}
                 onArchive={this.handleArchive}
                 onLoadMore={loadMoreTxs}
                 onRefresh={this.handleRefresh}
                 sourceType={sourceType}
               />
             ))}
+          {showRiskInvestments && <RiskInvestment coin={coin} />}
         </LazyLoadContainer>
       </SceneWrapper>
     )
   }
 }
 
-const mapStateToProps = (state, ownProps: OwnProps): LinkStatePropsType =>
-  getData(state, ownProps.coin, ownProps.coinfig)
+const mapStateToProps = (state, ownProps: OwnProps): LinkStatePropsType => getData(state, ownProps)
 
 const mapDispatchToProps = (dispatch: Dispatch, ownProps: OwnProps) => {
-  const { coin, coinfig } = ownProps
+  const { coin } = ownProps.computedMatch.params
+  const { coinfig } = window.coins[coin]
   const baseActions = {
+    analyticsActions: bindActionCreators(actions.analytics, dispatch),
     brokerageActions: bindActionCreators(actions.components.brokerage, dispatch),
     buySellActions: bindActionCreators(actions.components.buySell, dispatch),
+    interestActions: bindActionCreators(actions.components.interest, dispatch),
     miscActions: bindActionCreators(actions.core.data.misc, dispatch),
-    recurringBuyActions: bindActionCreators(actions.components.recurringBuy, dispatch),
-    withdrawActions: bindActionCreators(actions.components.withdraw, dispatch)
+    recurringBuyActions: bindActionCreators(actions.components.recurringBuy, dispatch)
   }
+  const isCustodialCoin = selectors.core.data.coins.getCustodialCoins().includes(coin)
+
   if (selectors.core.data.coins.getErc20Coins().includes(coin)) {
     return {
       ...baseActions,
@@ -327,7 +351,7 @@ const mapDispatchToProps = (dispatch: Dispatch, ownProps: OwnProps) => {
       loadMoreTxs: () => dispatch(actions.components.ethTransactions.loadMoreErc20(coin))
     }
   }
-  if (selectors.core.data.coins.getCustodialCoins().includes(coin)) {
+  if (isCustodialCoin || selectors.core.data.coins.getDynamicSelfCustodyCoins().includes(coin)) {
     return {
       ...baseActions,
       fetchData: () => {},
@@ -357,20 +381,17 @@ const mapDispatchToProps = (dispatch: Dispatch, ownProps: OwnProps) => {
 
 const connector = connect(mapStateToProps, mapDispatchToProps)
 
-export type OwnProps = {
-  coin: WalletCurrencyType
-  coinfig: CoinfigType
-}
+export type OwnProps = RouteComponentProps
 
 export type SuccessStateType = {
   currency: FiatType
   hasTxResults: boolean
+  interestEligible: EarnEligibleType
   isInvited: boolean
-  isRecurringBuy: boolean
   isSearchEntered: boolean
   pages: Array<any>
-  recurringBuys: RecurringBuyRegisteredList[]
   sourceType: string
+  stakingEligible: EarnEligibleType
 }
 
 // data is not remote
@@ -378,7 +399,7 @@ type LinkStatePropsType = SuccessStateType
 
 type Props = OwnProps & LinkStatePropsType & ConnectedProps<typeof connector>
 
-const enhance = compose<any>(
+const enhance = compose<React.ComponentType>(
   reduxForm({
     form: model.form.WALLET_TX_SEARCH,
     initialValues: { source: 'all' }

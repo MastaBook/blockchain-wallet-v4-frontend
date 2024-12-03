@@ -6,7 +6,10 @@ import styled from 'styled-components'
 
 import { Types } from '@core'
 import { Button, ButtonGroup, Text, TextGroup } from 'blockchain-info-components'
-import { FormGroup, FormItem, FormLabel, PasswordBox } from 'components/Form'
+import FormGroup from 'components/Form/FormGroup'
+import FormItem from 'components/Form/FormItem'
+import FormLabel from 'components/Form/FormLabel'
+import PasswordBox from 'components/Form/PasswordBox'
 import { SettingForm, SettingWrapper } from 'components/Setting'
 import { required, validPasswordConfirmation } from 'services/forms'
 
@@ -77,6 +80,7 @@ const Settings = (props) => {
               component={PasswordBox}
               validate={[required, validateSecondPassword]}
               data-e2e='secondPasswordInput'
+              placeholder='Enter second password'
             />
             <ButtonWrapper>
               <Button
@@ -121,7 +125,7 @@ const Settings = (props) => {
             <Text size='14px' weight={400} color='error'>
               <FormattedMessage
                 id='scenes.securitysettings.advanced.secondpasswordwallet.settings.phrase_warning'
-                defaultMessage="We highly recommend you backup your wallet's Secret Private Key Recovery Phrase before setting a second password."
+                defaultMessage="We highly recommend you backup your wallet's Recovery Phrase before setting a second password."
               />
             </Text>
             <Text size='14px' weight={400} color='error'>
@@ -150,6 +154,7 @@ const Settings = (props) => {
                 name='secondPassword'
                 validate={[validateSecondPassword, isMainPassword]}
                 component={PasswordBox}
+                placeholder='Enter second password'
               />
             </FormItem>
             <FormItem style={{ 'margin-top': '10px' }}>
@@ -197,7 +202,6 @@ const Settings = (props) => {
 
 Settings.propTypes = {
   handleToggle: PropTypes.func.isRequired,
-  onSubmit: PropTypes.func.isRequired,
   updateToggled: PropTypes.bool.isRequired
 }
 

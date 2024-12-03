@@ -1,11 +1,16 @@
 import React, { memo } from 'react'
 import { FormattedMessage } from 'react-intl'
-import moment from 'moment'
+import { format } from 'date-fns'
 
 import { fiatToString } from '@core/exchange/utils'
 import { FiatType, WithdrawalLock } from '@core/types'
 import { Button, Link, Text, TextGroup } from 'blockchain-info-components'
-import { FlyoutContainer, FlyoutContent, FlyoutFooter, FlyoutHeader } from 'components/Flyout'
+import {
+  FlyoutContainer,
+  FlyoutContent,
+  FlyoutFooter,
+  FlyoutHeader
+} from 'components/Flyout/Layout'
 import { CheckoutRow } from 'components/Rows'
 import { convertBaseToStandard } from 'data/components/exchange/services'
 
@@ -20,8 +25,8 @@ const OnHold = ({ fiatCurrency, handleHeaderClick, locks, totalLockedAmount }: P
           <TextGroup inline>
             <Text weight={400} lineHeight='24px' size='14px' color='grey600'>
               <FormattedMessage
-                id='modals.brokerage.withdraw_holding_period'
-                defaultMessage='Newly added funds are subject to a holding period. You can transfer between your Trading, Rewards, and Exchange accounts in the meantime.'
+                id='modals.brokerage.withdraw_holding_period_1'
+                defaultMessage='Newly added funds are subject to a holding period. You can transfer between your Trading, Earn, and Exchange accounts in the meantime.'
               />
             </Text>
             <Link
@@ -75,7 +80,7 @@ const OnHold = ({ fiatCurrency, handleHeaderClick, locks, totalLockedAmount }: P
                 unit: amount.currency as FiatType,
                 value: convertBaseToStandard('FIAT', amount.amount)
               })}
-              title={moment(expiresAt).format('MMMM Do YYYY')}
+              title={format(new Date(expiresAt), 'MMMM do yyyy')}
             />
           )
         })}

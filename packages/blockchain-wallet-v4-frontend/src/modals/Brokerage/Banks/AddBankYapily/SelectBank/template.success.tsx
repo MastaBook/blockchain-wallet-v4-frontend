@@ -1,14 +1,15 @@
 import React, { useState } from 'react'
 import { FormattedMessage } from 'react-intl'
 
-import { AddBankStepType, OBInstitution } from 'data/types'
+import FlyoutContainer from 'components/Flyout/Container'
+import FlyoutContent from 'components/Flyout/Content'
+import FlyoutHeader from 'components/Flyout/Header'
+import { AddBankStepType, BankPartners, OBInstitution } from 'data/types'
 
 import {
   BankSearchIcon,
   BankSearchInput,
   BankSearchWrapper,
-  BankWrapper,
-  ModalNavWithBackArrow,
   SimpleBankRow
 } from '../../../../components'
 import { LinkDispatchPropsType, OwnProps, SuccessStateType } from '.'
@@ -16,27 +17,34 @@ import { LinkDispatchPropsType, OwnProps, SuccessStateType } from '.'
 type Props = LinkDispatchPropsType & OwnProps & SuccessStateType
 
 const Success = (props: Props) => {
-  const [banks, setBanks] = useState<OBInstitution[]>(props.bankCredentials.attributes.institutions)
+  const { partner } = props.bankCredentials
+  const institutions =
+    partner === BankPartners.YAPILY ? props.bankCredentials.attributes.institutions : []
+  const [banks, setBanks] = useState<OBInstitution[]>(institutions)
 
   const simpleSearch = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { value } = event.target
-    const searchResults = props.bankCredentials.attributes.institutions.filter((bank) =>
+    const searchResults = institutions.filter((bank) =>
       bank.name.toLowerCase().match(value.toLowerCase())
     )
     setBanks(searchResults)
   }
 
   return (
-    <BankWrapper>
-      <ModalNavWithBackArrow {...props}>
+    <FlyoutContainer>
+      <FlyoutHeader
+        mode='back'
+        data-e2e='OpenBankingSelectBankBackButton'
+        onClick={props.handleClose}
+      >
         <FormattedMessage id='copy.find_your_bank' defaultMessage='Find Your Bank' />
-      </ModalNavWithBackArrow>
-      <BankSearchWrapper>
-        <BankSearchInput onChange={simpleSearch} placeholder='Search' type='text' />
-        <BankSearchIcon />
-      </BankSearchWrapper>
-      {banks.map((bank) => {
-        return (
+      </FlyoutHeader>
+      <FlyoutContent mode='top'>
+        <BankSearchWrapper>
+          <BankSearchInput onChange={simpleSearch} placeholder='Search' type='text' />
+          <BankSearchIcon />
+        </BankSearchWrapper>
+        {banks.map((bank) => (
           <SimpleBankRow
             key={bank.id}
             institution={bank}
@@ -47,9 +55,9 @@ const Success = (props: Props) => {
               })
             }}
           />
-        )
-      })}
-    </BankWrapper>
+        ))}
+      </FlyoutContent>
+    </FlyoutContainer>
   )
 }
 

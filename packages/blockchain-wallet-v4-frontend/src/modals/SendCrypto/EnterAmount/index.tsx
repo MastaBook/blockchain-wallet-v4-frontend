@@ -1,7 +1,7 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { FormattedMessage } from 'react-intl'
 import { connect, ConnectedProps } from 'react-redux'
-import { compose } from 'redux'
+import { bindActionCreators, compose, Dispatch } from 'redux'
 import { Field } from 'redux-form'
 import reduxForm, { InjectedFormProps } from 'redux-form/lib/reduxForm'
 import styled from 'styled-components'
@@ -10,27 +10,30 @@ import { convertCoinToCoin, convertCoinToFiat, convertFiatToCoin } from '@core/e
 import Currencies from '@core/exchange/currencies'
 import { formatFiat } from '@core/exchange/utils'
 import { getRatesSelector } from '@core/redux/data/misc/selectors'
-import { RatesType } from '@core/types'
+import { CoinType, RatesType } from '@core/types'
 import { Button, Icon, SkeletonRectangle, Text } from 'blockchain-info-components'
 import { DisplayContainer } from 'components/BuySell'
 import { BlueCartridge, ErrorCartridge } from 'components/Cartridge'
 import CollapseText from 'components/CollapseText'
-import { AmountTextBox } from 'components/Exchange'
 import { FlyoutWrapper } from 'components/Flyout'
+import BuyMoreLine from 'components/Flyout/Banners/BuyMoreLine'
 import UpgradeToGoldLine, { Flows } from 'components/Flyout/Banners/UpgradeToGoldLine'
 import { StepHeader } from 'components/Flyout/SendRequestCrypto'
-import { Form } from 'components/Form'
-import { selectors } from 'data'
+import AmountFieldInput from 'components/Form/AmountFieldInput'
+import Form from 'components/Form/Form'
+import SelectBox from 'components/Form/SelectBox'
+import { Padding } from 'components/Padding'
+import { actions, selectors } from 'data'
 import { convertBaseToStandard } from 'data/components/exchange/services'
 import { SendCryptoStepType } from 'data/components/sendCrypto/types'
+import { SwapBaseCounterTypes } from 'data/types'
+import { useDebounce } from 'hooks'
 import { getEffectiveLimit, getEffectivePeriod } from 'services/custodial'
-import { formatTextAmount } from 'services/forms'
 import { media } from 'services/styles'
 import { hexToRgb } from 'utils/helpers'
 
 import { AlertButton, MaxButton } from '../../components'
 import { TIER_TYPES } from '../../Settings/TradingLimits/model'
-import { Row } from '../../Swap/EnterAmount/Checkout'
 import { Props as OwnProps } from '..'
 import { SEND_FORM } from '../model'
 import { validate } from './validation'
@@ -48,15 +51,6 @@ const Amounts = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-`
-const AmountRow = styled(Row)<{ isError: boolean }>`
-  position: relative;
-  padding: 24px;
-  justify-content: center;
-  border: 0;
-  > input {
-    color: ${(props) => (props.isError ? 'red400' : 'textBlack')};
-  }
 `
 const CheckoutDisplayContainer = styled(DisplayContainer)`
   justify-content: space-between;
@@ -96,32 +90,11 @@ const PlusMinusIconWrapper = styled.div`
 const QuoteActionContainer = styled.div`
   height: 32px;
 `
-const QuoteRow = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-`
 
 const SendEnterAmount: React.FC<InjectedFormProps<{}, Props> & Props> = (props) => {
-  const [fontRatio, setRatio] = useState(1)
-
-  const normalizeAmount = (value, prevValue, allValues) => {
-    if (Number.isNaN(Number(value)) && value !== '.' && value !== '') return prevValue
-    return formatTextAmount(value, allValues && allValues.fix === 'FIAT')
-  }
-
-  const resizeSymbol = (isFiat, inputNode, fontSizeRatio, fontSizeNumber) => {
-    if (Number(fontSizeRatio) > 0) {
-      setRatio(fontSizeRatio > 1 ? 1 : fontSizeRatio)
-    }
-    const amountRowNode = inputNode.closest('#amount-row')
-    const currencyNode = isFiat
-      ? amountRowNode.children[0]
-      : amountRowNode.children[amountRowNode.children.length - 1]
-    currencyNode.style.fontSize = `${fontSizeNumber * (fontRatio - 0.3)}px`
-  }
-
   const {
+    buySellActions,
+    custodialFeesR,
     formActions,
     formErrors,
     formValues,
@@ -132,19 +105,31 @@ const SendEnterAmount: React.FC<InjectedFormProps<{}, Props> & Props> = (props) 
     verifyIdentity,
     walletCurrency
   } = props
-  const amtError = typeof formErrors.amount === 'string' && formErrors.amount
+  const [inputAmount, setInputAmount] = useState('0')
+  const debouncedAmount = useDebounce(inputAmount, 500)
+  useEffect(() => {
+    sendCryptoActions.fetchWithdrawalFees({})
+  }, [debouncedAmount])
+
+  const amountError = typeof formErrors.amount === 'string' && formErrors.amount
   const { amount, fix, selectedAccount, to } = formValues
-  const { coin } = selectedAccount
+  const { coin, type } = selectedAccount
+  const isAccount = type === SwapBaseCounterTypes.ACCOUNT
+  const custodialFees = custodialFeesR.getOrElse('0') || '0'
 
   const max = Number(convertCoinToCoin({ coin, value: selectedAccount.balance }))
-  const min = minR.getOrElse(0)
+  const min = minR.getOrElse('0')
   const maxMinusFee = Number(
     convertCoinToCoin({
       coin,
       value:
         Number(selectedAccount.balance) -
         Number(
-          convertCoinToCoin({ baseToStandard: false, coin, value: props.feesR.getOrElse(0) || 0 })
+          convertCoinToCoin({
+            baseToStandard: false,
+            coin,
+            value: custodialFees
+          })
         )
     })
   )
@@ -174,6 +159,20 @@ const SendEnterAmount: React.FC<InjectedFormProps<{}, Props> & Props> = (props) 
 
   const effectiveLimit = getEffectiveLimit(sendLimits)
   const effectivePeriod = getEffectivePeriod(sendLimits)
+
+  const handleMax = () => {
+    if (isAccount) {
+      formActions.change(SEND_FORM, 'amount', 'MAX')
+      sendCryptoActions.setStep({ step: SendCryptoStepType.CONFIRM })
+    } else {
+      formActions.change(SEND_FORM, 'fix', 'CRYPTO')
+      formActions.change(SEND_FORM, 'amount', maxMinusFee)
+    }
+  }
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputAmount(e.target.value)
+  }
 
   return (
     <Wrapper onSubmit={() => sendCryptoActions.setStep({ step: SendCryptoStepType.CONFIRM })}>
@@ -228,61 +227,24 @@ const SendEnterAmount: React.FC<InjectedFormProps<{}, Props> & Props> = (props) 
           paddingTop: '0px'
         }}
       >
-        <AmountRow id='amount-row' isError={!!amtError}>
-          {fix === 'FIAT' && (
-            <Text size='56px' color={amtError ? 'red400' : 'textBlack'} weight={500}>
-              {Currencies[walletCurrency].units[walletCurrency].symbol}
-            </Text>
-          )}
-          <Field
-            data-e2e='sendAmountInput'
-            name='amount'
-            // @ts-ignore
-            component={AmountTextBox}
-            normalize={normalizeAmount}
-            // eslint-disable-next-line
-            onUpdate={resizeSymbol.bind(null, fix === 'FIAT')}
-            maxFontSize='56px'
-            placeholder='0'
-            // leave fiatActive always to avoid 50% width in HOC?
-            fiatActive
-            haveError={!!amtError}
-            {...{
-              autoFocus: true,
-              hideError: true
-            }}
-          />
-          {fix === 'CRYPTO' && (
-            <Text size='56px' color={amtError ? 'red400' : 'textBlack'} weight={500}>
-              {coin}
-            </Text>
-          )}
-        </AmountRow>
+        <AmountFieldInput
+          coin={coin}
+          fiatCurrency={walletCurrency}
+          amountError={amountError}
+          quote={quote}
+          data-e2e='sendAmountInput'
+          fix={fix}
+          name='amount'
+          onChange={handleChange}
+          showCounter
+          showToggle
+          onToggleFix={() => {
+            formActions.change(SEND_FORM, 'fix', fix === 'CRYPTO' ? 'FIAT' : 'CRYPTO')
+            formActions.change(SEND_FORM, 'amount', fix === 'CRYPTO' ? fiatAmt : cryptoAmt)
+          }}
+        />
         <QuoteActionContainer>
-          <QuoteRow>
-            <div />
-            <Text
-              color={amtError ? 'red400' : 'grey600'}
-              size='14px'
-              weight={500}
-              data-e2e='sendQuoteAmount'
-            >
-              {fix === 'FIAT' && coin} {quote} {fix === 'CRYPTO' && walletCurrency}
-            </Text>
-            <Icon
-              color='blue600'
-              cursor
-              name='up-down-chevron'
-              onClick={() => {
-                formActions.change(SEND_FORM, 'fix', fix === 'CRYPTO' ? 'FIAT' : 'CRYPTO')
-                formActions.change(SEND_FORM, 'amount', fix === 'CRYPTO' ? fiatAmt : cryptoAmt)
-              }}
-              role='button'
-              size='24px'
-              data-e2e='sendSwitchIcon'
-            />
-          </QuoteRow>
-          {amtError && amtError !== 'ABOVE_MAX_LIMIT' ? (
+          {amountError && amountError !== 'ABOVE_MAX_LIMIT' ? (
             <div
               style={{
                 display: 'flex',
@@ -293,21 +255,21 @@ const SendEnterAmount: React.FC<InjectedFormProps<{}, Props> & Props> = (props) 
             >
               <CustomErrorCartridge
                 onClick={() => {
-                  formActions.change(SEND_FORM, 'fix', 'CRYPTO')
-                  formActions.change(
-                    SEND_FORM,
-                    'amount',
-                    amtError === 'ABOVE_MAX' ? maxMinusFee : min
-                  )
+                  if (amountError === 'ABOVE_MAX') {
+                    handleMax()
+                  } else {
+                    formActions.change(SEND_FORM, 'fix', 'CRYPTO')
+                    formActions.change(SEND_FORM, 'amount', min)
+                  }
                 }}
               >
-                {amtError === 'ABOVE_MAX' && (
+                {amountError === 'ABOVE_MAX' && (
                   <FormattedMessage
                     id='copy.above_max_amount'
                     defaultMessage='Amount is above Max'
                   />
                 )}
-                {amtError === 'BELOW_MIN' && (
+                {amountError === 'BELOW_MIN' && (
                   <FormattedMessage
                     id='copy.below_min_amount'
                     defaultMessage='Amount is below Min'
@@ -318,26 +280,23 @@ const SendEnterAmount: React.FC<InjectedFormProps<{}, Props> & Props> = (props) 
           ) : null}
         </QuoteActionContainer>
 
-        <MaxButton
-          type='Send'
-          onClick={() => {
-            formActions.change(SEND_FORM, 'fix', 'CRYPTO')
-            formActions.change(SEND_FORM, 'amount', maxMinusFee)
-          }}
-        />
+        <Padding top={70}>
+          <MaxButton type='Send' onClick={handleMax} />
+        </Padding>
 
         <Amounts>
           <Text
             cursor='pointer'
             // @ts-ignore
             role='button'
-            onClick={() => {
-              formActions.change(SEND_FORM, 'fix', 'CRYPTO')
-              formActions.change(SEND_FORM, 'amount', maxMinusFee)
-            }}
+            onClick={handleMax}
           >
             <Text color='blue600' weight={600} size='12px'>
-              <FormattedMessage id='copy.available' defaultMessage='Available' />
+              {isAccount ? (
+                <FormattedMessage id='copy.balance' defaultMessage='Balance' />
+              ) : (
+                <FormattedMessage id='copy.available' defaultMessage='Available' />
+              )}
             </Text>
             <Text
               color='black'
@@ -345,32 +304,67 @@ const SendEnterAmount: React.FC<InjectedFormProps<{}, Props> & Props> = (props) 
               size='14px'
               style={{ marginTop: '4px', textAlign: 'right' }}
             >
-              {maxMinusFee} {coin}
+              {isAccount ? max : maxMinusFee} {coin}
             </Text>
           </Text>
-          <div>
+          <div style={{ width: '30%' }}>
             <Text color='blue600' weight={600} size='12px'>
-              <FormattedMessage id='copy.network_fee' defaultMessage='Network Fee' />
+              {isAccount ? (
+                <FormattedMessage id='copy.network_fee' defaultMessage='Network Fee' />
+              ) : (
+                <FormattedMessage id='copy.processing_fee' defaultMessage='Processing Fee' />
+              )}
             </Text>
-            {/* TODO: make field */}
-            <Text color='black' weight={600} size='14px' style={{ marginTop: '4px' }}>
-              {props.feesR.cata({
-                Failure: (e) => (
-                  <CustomBlueCartridge
-                    pointer
-                    data-e2e='retryFetchFees'
-                    onClick={() => props.sendCryptoActions.fetchWithdrawalFees()}
-                  >
-                    <Text size='10px' color='blue600' weight={600}>
-                      <FormattedMessage id='copy.retry' defaultMessage='Retry' />
-                    </Text>
-                  </CustomBlueCartridge>
-                ),
-                Loading: () => <SkeletonRectangle height='24px' width='52px' />,
-                NotAsked: () => <SkeletonRectangle height='24px' width='52px' />,
-                Success: (val) => `${val} ${coin}`
-              })}
-            </Text>
+            {isAccount ? (
+              <Field
+                component={SelectBox}
+                name='fee'
+                elements={[
+                  {
+                    group: '',
+                    items: [
+                      {
+                        text: 'Low',
+                        value: 'LOW'
+                      },
+                      {
+                        text: 'Medium',
+                        value: 'NORMAL'
+                      },
+                      {
+                        text: 'High',
+                        value: 'HIGH'
+                      }
+                    ]
+                  }
+                ]}
+              >
+                <option value='LOW'>Low</option>
+              </Field>
+            ) : (
+              <Text color='black' weight={600} size='14px' style={{ marginTop: '4px' }}>
+                {custodialFeesR.cata({
+                  Failure: () => (
+                    <CustomBlueCartridge
+                      pointer
+                      data-e2e='retryFetchFees'
+                      onClick={() => props.sendCryptoActions.getCustodialWithdrawalFee()}
+                    >
+                      <Text size='10px' color='blue600' weight={600}>
+                        <FormattedMessage id='copy.retry' defaultMessage='Retry' />
+                      </Text>
+                    </CustomBlueCartridge>
+                  ),
+                  Loading: () => <SkeletonRectangle height='24px' width='52px' />,
+                  NotAsked: () => <SkeletonRectangle height='24px' width='52px' />,
+                  Success: (val) => (
+                    <>
+                      {val} {coin}
+                    </>
+                  )
+                })}
+              </Text>
+            )}
           </div>
         </Amounts>
       </FlyoutWrapper>
@@ -379,20 +373,20 @@ const SendEnterAmount: React.FC<InjectedFormProps<{}, Props> & Props> = (props) 
           paddingTop: '0px'
         }}
       >
-        {!amtError && (
+        {!amountError && (
           <Button
             nature='primary'
             type='submit'
             data-e2e='enterAmountBtn'
             fullwidth
             jumbo
-            disabled={!amount || !!formErrors.amount}
+            disabled={!amount || !!formErrors.amount || custodialFees === '0'}
           >
             <FormattedMessage id='buttons.next' defaultMessage='Next' />
           </Button>
         )}
 
-        {amtError && amtError === 'ABOVE_MAX_LIMIT' && effectiveLimit && (
+        {amountError && amountError === 'ABOVE_MAX_LIMIT' && effectiveLimit && (
           <>
             <AlertButton>
               <FormattedMessage id='copy.over_your_limit' defaultMessage='Over Your Limit' />
@@ -420,21 +414,35 @@ const SendEnterAmount: React.FC<InjectedFormProps<{}, Props> & Props> = (props) 
           </>
         )}
 
-        {amtError === 'ABOVE_MAX' && (
-          <AlertButton>
-            <FormattedMessage
-              id='copy.above_max'
-              defaultMessage='{amount} Maximum'
-              values={{
-                amount:
-                  fix === 'FIAT'
-                    ? `${Currencies[walletCurrency].units[walletCurrency].symbol} ${max}`
-                    : `${coin} ${max}`
-              }}
-            />
-          </AlertButton>
+        {amountError === 'ABOVE_MAX' && (
+          <>
+            <AlertButton>
+              <FormattedMessage
+                id='copy.not_enough_coin'
+                defaultMessage='Not Enough {coin}'
+                values={{
+                  coin
+                }}
+              />
+            </AlertButton>
+            <Text
+              size='14px'
+              color='grey900'
+              weight={500}
+              style={{ marginBottom: '24px', marginTop: '24px', textAlign: 'center' }}
+            >
+              <FormattedMessage
+                id='modals.sendcrypto.enteramount.over_balance'
+                defaultMessage='The max you can send from this wallet is {coin} {amount}. Buy {coin} {amount} now to send this amount.'
+                values={{
+                  amount: max,
+                  coin
+                }}
+              />
+            </Text>
+          </>
         )}
-        {amtError === 'BELOW_MIN' && (
+        {amountError === 'BELOW_MIN' && (
           <AlertButton>
             <FormattedMessage
               id='copy.below_min'
@@ -442,15 +450,29 @@ const SendEnterAmount: React.FC<InjectedFormProps<{}, Props> & Props> = (props) 
               values={{
                 amount:
                   fix === 'FIAT'
-                    ? `${Currencies[walletCurrency].units[walletCurrency].symbol} ${min}`
-                    : `${coin} ${min}`
+                    ? `${Currencies[walletCurrency].units[walletCurrency].symbol}${min}`
+                    : `${coin}${min}`
               }}
             />
           </AlertButton>
         )}
 
-        {sendLimits?.suggestedUpgrade?.requiredTier === TIER_TYPES.GOLD && (
-          <UpgradeToGoldLine type={Flows.SEND} verifyIdentity={verifyIdentity} />
+        {(sendLimits?.suggestedUpgrade?.requiredTier === TIER_TYPES.GOLD ||
+          (amountError && amountError === 'ABOVE_MAX_LIMIT' && effectiveLimit)) &&
+          !isAccount && <UpgradeToGoldLine type={Flows.SEND} verifyIdentity={verifyIdentity} />}
+
+        {amountError === 'ABOVE_MAX' && (
+          <BuyMoreLine
+            startBuy={() =>
+              buySellActions.showModal({
+                cryptoCurrency: coin as CoinType,
+                orderType: 'BUY',
+                origin: 'Send'
+              })
+            }
+            buyAmount={`${coin} ${amount}`}
+            coin={coin}
+          />
         )}
       </FlyoutWrapper>
     </Wrapper>
@@ -462,13 +484,17 @@ const mapStateToProps = (state, ownProps: OwnProps) => {
 
   const ratesSelector = getRatesSelector(coin, state)
   return {
-    feesR: selectors.components.sendCrypto.getWithdrawalFees(state, coin),
-    minR: selectors.components.sendCrypto.getWithdrawalMin(state, coin),
+    custodialFeesR: selectors.components.sendCrypto.getCustodialWithdrawalFee(state),
+    minR: selectors.components.sendCrypto.getWithdrawalMin(state),
     rates: ratesSelector.getOrElse({} as RatesType)
   }
 }
 
-const connector = connect(mapStateToProps)
+const mapDispatchToProps = (dispatch: Dispatch) => ({
+  sendCryptoActions: bindActionCreators(actions.components.sendCrypto, dispatch)
+})
+
+const connector = connect(mapStateToProps, mapDispatchToProps)
 const enhance = compose(
   connector,
   reduxForm<{}, Props>({
@@ -481,7 +507,7 @@ const enhance = compose(
 export type Props = ConnectedProps<typeof connector> &
   OwnProps & {
     formErrors: {
-      amount?: 'ABOVE_MAX' | 'ABOVE_MAX_LIMIT' | 'BELOW_MIN' | 'NEGATIVE_INCOMING_AMT' | boolean
+      amount?: 'ABOVE_MAX' | 'ABOVE_MAX_LIMIT' | 'BELOW_MIN' | boolean
     }
   }
 

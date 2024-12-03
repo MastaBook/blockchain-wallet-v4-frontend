@@ -1,7 +1,5 @@
 import React from 'react'
-import { FormattedMessage } from 'react-intl'
 import { connect } from 'react-redux'
-import { includes, pickBy } from 'ramda'
 import { bindActionCreators, compose } from 'redux'
 
 import { RemoteDataType } from '@core/types'
@@ -13,45 +11,25 @@ import modalEnhancer from 'providers/ModalEnhancer'
 
 import AdditionalInfo from './AdditionalInfo'
 import EmailVerification from './EmailVerification'
-import InfoAndResidential from './InfoAndResidential'
+import ExtraFields from './ExtraFields'
 import MoreInfo from './MoreInfo'
 import { getData } from './selectors'
 import Submitted from './Submitted'
 import Loading from './template.loading'
+import UserAddress from './UserAddress'
+import UserInfoDetails from './UserInfoDetails'
 import Verify from './Verify'
 
 const { STEPS } = model.components.identityVerification
 
-const stepMap = {
-  [STEPS.infoAndResidential]: (
-    <FormattedMessage
-      id='modals.identityverification.steps.info_and_residential'
-      defaultMessage='Info and residential'
-    />
-  ),
-  [STEPS.moreInfo]: (
-    <FormattedMessage id='modals.identityverification.steps.more_info' defaultMessage='Info' />
-  ),
-  [STEPS.additionalInfo]: (
-    <FormattedMessage
-      id='modals.identityverification.steps.additional_info'
-      defaultMessage='Additional Info'
-    />
-  ),
-  [STEPS.verify]: (
-    <FormattedMessage id='modals.identityverification.steps.verify' defaultMessage='Verify' />
-  ),
-  [STEPS.submitted]: (
-    <FormattedMessage id='modals.identityverification.steps.submitted' defaultMessage='Submitted' />
-  )
-}
-
 type OwnProps = {
   checkSddEligibility?: boolean
   close: () => void
+  context: string
   emailVerified: boolean
   needMoreInfo: boolean
   onCompletionCallback?: () => void
+  origin: string
   position: number
   step: string
   steps: RemoteDataType<any, any>
@@ -80,34 +58,45 @@ class IdentityVerification extends React.PureComponent<Props, State> {
     this.initializeVerification()
   }
 
-  getSteps = (steps) => pickBy((_, step) => includes(step, steps), stepMap)
+  componentWillUnmount() {
+    this.props.actions.kycModalClosed()
+  }
 
   handleClose = () => {
     this.setState({ show: false })
-    setTimeout(this.props.close, duration)
+    setTimeout(() => {
+      this.props.close()
+    }, duration)
   }
 
   initializeVerification = () => {
-    const { needMoreInfo, tier } = this.props
-    this.props.actions.initializeVerification(tier, needMoreInfo)
+    const { context, needMoreInfo, origin, tier } = this.props
+    this.props.actions.initializeVerification({ context, needMoreInfo, origin, tier })
   }
 
   getStepComponent = (emailVerified: boolean, step: string) => {
-    if (step === STEPS.infoAndResidential) {
+    if (step === STEPS.userDetails) {
       if (!emailVerified) {
         return <EmailVerification handleClose={this.handleClose} />
       }
-      return (
-        <InfoAndResidential
-          checkSddEligibility={this.props.checkSddEligibility}
-          onClose={this.handleClose}
-          onCompletionCallback={this.props.onCompletionCallback}
-        />
-      )
+
+      return <UserInfoDetails onClose={this.handleClose} />
+    }
+
+    if (step === STEPS.userAddress) {
+      return <UserAddress onClose={this.handleClose} />
     }
 
     if (step === STEPS.moreInfo) {
       return <MoreInfo />
+    }
+    if (step === STEPS.addExtraStep) {
+      return (
+        <ExtraFields
+          onClose={this.handleClose}
+          onCompletionCallback={this.props.onCompletionCallback}
+        />
+      )
     }
     if (step === STEPS.additionalInfo) {
       return <AdditionalInfo onClose={this.handleClose} />
@@ -163,6 +152,7 @@ class IdentityVerification extends React.PureComponent<Props, State> {
           isOpen={show}
           onClose={this.handleClose}
           data-e2e='identityVerificationModal'
+          doNotHide
         >
           <FlyoutChild>{this.getStepComponent(emailVerified, step)}</FlyoutChild>
         </Flyout>
@@ -173,7 +163,7 @@ class IdentityVerification extends React.PureComponent<Props, State> {
 
 // @ts-ignore
 IdentityVerification.defaultProps = {
-  step: STEPS.infoAndResidential
+  step: STEPS.userDetails
 }
 
 const mapDispatchToProps = (dispatch) => ({

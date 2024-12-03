@@ -1,27 +1,28 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { createSlice, PayloadAction } from '@reduxjs/toolkit'
-import { init } from 'ramda'
 
 import { Remote } from '@core'
 import {
-  AssetEventsType,
-  CollectionData,
-  ExplorerGatewayNftCollectionType,
+  ExplorerGatewaySearchType,
   GasCalculationOperations,
   GasDataI,
   NftAsset,
-  NftAssetsType,
-  NftOrdersType,
-  OfferEventsType,
-  Order,
-  SellOrder
+  NftOrder,
+  NftUserPreferencesReturnType,
+  NftUserPreferencesType,
+  OpenSeaStatus,
+  OwnerNftBalance,
+  SeaportRawOrder,
+  UnsignedOrder,
+  WyvernRawOrder
 } from '@core/network/api/nfts/types'
-import { calculateGasFees, getNftBuyOrders } from '@core/redux/payment/nfts'
+import { calculateGasFees } from '@core/redux/payment/nfts'
 import { Await } from '@core/types'
 
-import { NftOrderStepEnum, NftsStateType } from './types'
+import { NftOrderStatusEnum, NftOrderStepEnum, NftsStateType } from './types'
 
 const initialState: NftsStateType = {
+  activeTab: 'explore',
   assets: {
     atBound: false,
     collection: 'all',
@@ -30,136 +31,159 @@ const initialState: NftsStateType = {
     list: [],
     page: 0
   },
-  cancelListing: Remote.NotAsked,
+  collection: Remote.NotAsked,
   collections: Remote.NotAsked,
-  marketplace: {
-    atBound: false,
-    isFailure: false,
-    isLoading: true,
-    list: [],
-    page: 0,
-    token_ids_queried: []
-  },
-  offersMade: {
-    atBound: false,
-    isFailure: false,
-    isLoading: true,
-    list: [],
-    page: 0
-  },
+  nftOwnerAssets: Remote.NotAsked,
+  openSeaAsset: Remote.NotAsked,
+  openSeaStatus: Remote.NotAsked,
   orderFlow: {
-    activeOrder: null,
-    asset: Remote.NotAsked,
     fees: Remote.NotAsked,
-    order: Remote.NotAsked,
-    step: NftOrderStepEnum.SHOW_ASSET
+    isSubmitting: false,
+    matchingOrder_LEGACY: Remote.NotAsked,
+    prevStep: null,
+    seaportOrder: null,
+    status: null,
+    step: null,
+    userHasPendingTxR: Remote.NotAsked,
+    viewOrder: null,
+    wrapEthFees: Remote.NotAsked,
+    wyvernOrder: null
   },
-  sellOrder: Remote.NotAsked,
-  transfer: Remote.NotAsked
+  search: Remote.NotAsked,
+  userPreferences: Remote.NotAsked
 }
 
 const nftsSlice = createSlice({
   initialState,
   name: 'nfts',
   reducers: {
+    acceptOffer: (
+      state,
+      action: PayloadAction<{
+        asset: NftAsset
+        gasData: GasDataI
+        seaportOrder: SeaportRawOrder
+      }>
+    ) => {},
+    acceptOffer_LEGACY: (
+      state,
+      action: PayloadAction<{
+        asset: NftAsset
+        buy: UnsignedOrder
+        gasData: GasDataI
+        sell: UnsignedOrder
+      }>
+    ) => {},
     cancelListing: (
       state,
-      action: PayloadAction<{ gasData: GasDataI; sell_order: SellOrder }>
+      action: PayloadAction<{
+        asset: NftAsset
+        gasData: GasDataI
+        seaportOrder: SeaportRawOrder | null
+      }>
     ) => {},
-    cancelListingFailure: (state, action: PayloadAction<{ error: string }>) => {
-      state.cancelListing = Remote.Success(action.payload.error)
-    },
-    cancelListingLoading: (state) => {
-      state.cancelListing = Remote.Loading
-    },
-    cancelListingSuccess: (state) => {
-      state.cancelListing = Remote.Success(true)
-    },
-    clearAndRefetchAssets: (state) => {},
-    clearAndRefetchOffersMade: (state) => {},
-    clearAndRefetchOrders: (state) => {},
+    cancelListing_LEGACY: (
+      state,
+      action: PayloadAction<{ asset: NftAsset; gasData: GasDataI; order: WyvernRawOrder }>
+    ) => {},
+    cancelOffer: (
+      state,
+      action: PayloadAction<{
+        asset: NftAsset
+        gasData: GasDataI
+        seaportOrder: SeaportRawOrder | null
+      }>
+    ) => {},
+    cancelOffer_LEGACY: (
+      state,
+      action: PayloadAction<{ asset: NftAsset; gasData: GasDataI; order: WyvernRawOrder | null }>
+    ) => {},
+    createListing: (
+      state,
+      action: PayloadAction<{
+        asset: NftAsset
+        endPrice: number | null
+        expirationMinutes: number
+        gasData: GasDataI
+        paymentTokenAddress: string | undefined
+        reservePrice: number | undefined
+        startPrice: number
+        waitForHighestBid: boolean | undefined
+      }>
+    ) => {},
+    createListing_LEGACY: (
+      state,
+      action: PayloadAction<{
+        asset: NftAsset
+        endPrice: number | null
+        expirationMinutes: number
+        gasData: GasDataI
+        paymentTokenAddress: string | undefined
+        reservePrice: number | undefined
+        startPrice: number
+        waitForHighestBid: boolean | undefined
+      }>
+    ) => {},
     createOffer: (
       state,
       action: PayloadAction<{
         amount?: string
+        amtToWrap?: string
+        asset: NftAsset
         coin?: string
-        order: NftOrdersType['orders'][0]
+        expirationTime: number
+        offerFees: GasDataI
+        wrapFees: GasDataI
       }>
     ) => {},
-    createOfferFailure: (state, action: PayloadAction<string>) => {
-      state.orderFlow.order = Remote.Failure(action.payload)
-    },
-    createOfferLoading: (state) => {
-      state.orderFlow.order = Remote.Loading
-    },
-    createOfferSuccess: (state, action: PayloadAction<Order>) => {
-      state.orderFlow.order = Remote.Success(action.payload)
-    },
-    createOrder: (
+    createOffer_LEGACY: (
       state,
       action: PayloadAction<{
         amount?: string
+        amtToWrap?: string
+        asset: NftAsset
         coin?: string
-        gasData: GasDataI
-        order: NftOrdersType['orders'][0]
+        expirationTime: number
+        offerFees: GasDataI
+        wrapFees?: GasDataI
       }>
     ) => {},
-    createOrderFailure: (state, action: PayloadAction<string>) => {
-      state.orderFlow.order = Remote.Failure(action.payload)
-    },
-    createOrderLoading: (state) => {
-      state.orderFlow.order = Remote.Loading
-    },
-    createOrderSuccess: (state, action: PayloadAction<Order>) => {
-      state.orderFlow.order = Remote.Success(action.payload)
-    },
-    createSellOrder: (
+    createOrder: (
       state,
       action: PayloadAction<{
-        asset: NftAssetsType['assets'][0]
+        asset: NftAsset
         gasData: GasDataI
-        startPrice: number
+        seaportOrder: SeaportRawOrder
       }>
     ) => {},
-    createSellOrderFailure: (state, action: PayloadAction<string>) => {
-      state.sellOrder = Remote.Failure(action.payload)
-    },
-    createSellOrderLoading: (state) => {
-      state.sellOrder = Remote.Loading
-    },
-    createSellOrderSuccess: (state, action: PayloadAction<Order>) => {
-      state.sellOrder = Remote.Success(action.payload)
-    },
+    createOrder_LEGACY: (
+      state,
+      action: PayloadAction<{
+        asset: NftAsset
+        buy: NftOrder
+        gasData: GasDataI
+        sell: NftOrder
+      }>
+    ) => {},
     createTransfer: (
       state,
       action: PayloadAction<{
-        asset: NftAssetsType['assets'][0]
+        asset: NftAsset
         gasData: GasDataI
         to: string
       }>
     ) => {},
-    createTransferFailure: (state, action: PayloadAction<string>) => {
-      state.transfer = Remote.Failure(action.payload)
-    },
-    createTransferLoading: (state) => {
-      state.transfer = Remote.Loading
-    },
-    createTransferSuccess: (state, action: PayloadAction<boolean>) => {
-      state.transfer = Remote.Success(action.payload)
-    },
     fetchFees: (
       state,
       action: PayloadAction<
         | {
-            offer?: string
-            operation: GasCalculationOperations.Buy
-            order: NftOrdersType['orders'][0]
-            paymentTokenAddress?: string
+            offer: SeaportRawOrder
+            operation: GasCalculationOperations.AcceptOffer
           }
         | {
-            asset: NftAsset
-            operation: GasCalculationOperations.Sell
-            startPrice: number
+            operation: GasCalculationOperations.Buy
+            order: SeaportRawOrder
+            paymentTokenAddress?: string
           }
         | {
             asset: NftAsset
@@ -167,8 +191,24 @@ const nftsSlice = createSlice({
             to: string
           }
         | {
-            operation: GasCalculationOperations.Cancel
-            order: SellOrder
+            amount?: string
+            amtToWrap?: string
+            asset: NftAsset
+            coin?: string
+            expirationTime?: number
+            operation: GasCalculationOperations.CreateOffer
+          }
+        | {
+            asset: NftAsset
+            operation: GasCalculationOperations.Sell
+          }
+        | {
+            operation: GasCalculationOperations.CancelOrder
+            order: SeaportRawOrder
+          }
+        | {
+            offer: SeaportRawOrder
+            operation: GasCalculationOperations.CancelOffer
           }
       >
     ) => {},
@@ -184,92 +224,268 @@ const nftsSlice = createSlice({
     ) => {
       state.orderFlow.fees = Remote.Success(action.payload)
     },
-    fetchNftAssets: () => {},
-    fetchNftAssetsFailure: (state, action: PayloadAction<string>) => {
-      state.assets.isFailure = true
-    },
-    fetchNftAssetsLoading: (state) => {
-      state.assets.isLoading = true
-    },
-    fetchNftAssetsSuccess: (state, action: PayloadAction<NftAssetsType['assets']>) => {
-      state.assets.isFailure = false
-      state.assets.isLoading = false
-      state.assets.list = [...state.assets.list, ...action.payload]
-    },
-    fetchNftCollections: (
+    fetchFeesWrapEth: (
       state,
-      action: PayloadAction<{
-        direction?: 'ASC' | 'DESC'
-        sortBy?: keyof ExplorerGatewayNftCollectionType
-      }>
+      action: PayloadAction<{ operation: GasCalculationOperations.WrapEth }>
     ) => {},
-    fetchNftCollectionsFailure: (state, action: PayloadAction<string>) => {
-      state.collections = Remote.Failure(action.payload)
+
+    fetchFeesWrapEthFailure: (state, action: PayloadAction<string>) => {
+      state.orderFlow.wrapEthFees = Remote.Failure(action.payload)
     },
-    fetchNftCollectionsLoading: (state) => {
-      state.collections = Remote.Loading
+    fetchFeesWrapEthLoading: (state) => {
+      state.orderFlow.wrapEthFees = Remote.Loading
     },
-    fetchNftCollectionsSuccess: (
+    fetchFeesWrapEthSuccess: (
       state,
-      action: PayloadAction<ExplorerGatewayNftCollectionType[]>
+      action: PayloadAction<Await<ReturnType<typeof calculateGasFees>>>
     ) => {
-      state.collections = Remote.Success(action.payload)
+      state.orderFlow.wrapEthFees = Remote.Success(action.payload)
     },
-    fetchNftOffersMade: () => {},
-    fetchNftOffersMadeFailure: (state, action: PayloadAction<string>) => {
-      state.offersMade.isFailure = true
+    fetchFees_LEGACY: (
+      state,
+      action: PayloadAction<
+        | {
+            operation: GasCalculationOperations.AcceptOffer
+            order: WyvernRawOrder
+          }
+        | {
+            asset: NftAsset
+            offer: string
+            operation: GasCalculationOperations.CreateOffer
+            paymentTokenAddress: string
+          }
+        | {
+            operation: GasCalculationOperations.Buy
+            order: WyvernRawOrder
+            paymentTokenAddress?: string
+          }
+        | {
+            asset: NftAsset
+            endPrice?: number
+            expirationMinutes: number
+            operation: GasCalculationOperations.Sell
+            paymentTokenAddress?: string
+            reservePrice?: number
+            startPrice: number
+            waitForHighestBid?: boolean
+          }
+        | {
+            asset: NftAsset
+            operation: GasCalculationOperations.Transfer
+            to: string
+          }
+        | {
+            operation: GasCalculationOperations.Cancel
+            order: WyvernRawOrder
+          }
+      >
+    ) => {},
+    fetchFees_LEGACY_Failure: (state, action: PayloadAction<string>) => {
+      state.orderFlow.fees = Remote.Failure(action.payload)
     },
-    fetchNftOffersMadeLoading: (state) => {
-      state.offersMade.isLoading = true
+    fetchFees_LEGACY_Loading: (state) => {
+      state.orderFlow.fees = Remote.Loading
     },
-    fetchNftOffersMadeSuccess: (state, action: PayloadAction<OfferEventsType['asset_events']>) => {
-      state.offersMade.isFailure = false
-      state.offersMade.isLoading = false
-      state.offersMade.list = [...state.offersMade.list, ...action.payload]
+    fetchFees_LEGACY_Success: (
+      state,
+      action: PayloadAction<Await<ReturnType<typeof calculateGasFees>>>
+    ) => {
+      state.orderFlow.fees = Remote.Success(action.payload)
+    },
+    fetchLatestPendingTxsFailure: (state, action: PayloadAction<string>) => {
+      state.orderFlow.userHasPendingTxR = Remote.Failure(action.payload)
+    },
+    fetchLatestPendingTxsLoading: (state) => {
+      state.orderFlow.userHasPendingTxR = Remote.Loading
+    },
+    fetchLatestPendingTxsSuccess: (state, action: PayloadAction<boolean>) => {
+      state.orderFlow.userHasPendingTxR = Remote.Success(action.payload)
+    },
+    fetchMatchingOrder_LEGACY: (state) => {},
+    fetchMatchingOrder_LEGACY_Failure: (state, action: PayloadAction<string>) => {
+      state.orderFlow.matchingOrder_LEGACY = Remote.Failure(action.payload)
+    },
+    fetchMatchingOrder_LEGACY_Loading: (state) => {
+      state.orderFlow.matchingOrder_LEGACY = Remote.Loading
+    },
+    fetchMatchingOrder_LEGACY_Success: (
+      state,
+      action: PayloadAction<{ buy: NftOrder; sell: NftOrder }>
+    ) => {
+      state.orderFlow.matchingOrder_LEGACY = Remote.Success(action.payload)
     },
     fetchNftOrderAsset: () => {},
-    fetchNftOrderAssetFailure: (state, action: PayloadAction<string>) => {
-      state.orderFlow.asset = Remote.Failure(action.payload)
+    fetchNftOwnerAssets: (
+      state,
+      action: PayloadAction<{
+        defaultEthAddr: string
+      }>
+    ) => {},
+    fetchNftOwnerAssetsFailure: (state, action: PayloadAction<OwnerNftBalance>) => {
+      state.nftOwnerAssets = Remote.Failure(action.payload)
     },
-    fetchNftOrderAssetLoading: (state) => {
-      state.orderFlow.asset = Remote.Loading
+    fetchNftOwnerAssetsLoading: (state) => {
+      state.nftOwnerAssets = Remote.Loading
     },
-    fetchNftOrderAssetSuccess: (state, action: PayloadAction<NftAsset>) => {
-      state.orderFlow.asset = Remote.Success(action.payload)
+    fetchNftOwnerAssetsSuccess: (state, action: PayloadAction<OwnerNftBalance>) => {
+      state.nftOwnerAssets = Remote.Success(action.payload)
     },
-    fetchNftOrders: () => {},
-    fetchNftOrdersFailure: (state, action: PayloadAction<string>) => {
-      state.marketplace.isLoading = false
-      state.marketplace.isFailure = true
+    fetchNftUserPreferences: (state) => {},
+    fetchNftUserPreferencesFailure: (state, action: PayloadAction<string>) => {
+      state.userPreferences = Remote.Failure(action.payload)
     },
-    fetchNftOrdersLoading: (state) => {
-      state.marketplace.isLoading = true
+    fetchNftUserPreferencesLoading: (state) => {
+      state.userPreferences = Remote.Loading
     },
-    fetchNftOrdersSuccess: (state, action: PayloadAction<NftOrdersType['orders']>) => {
-      state.marketplace.isFailure = false
-      state.marketplace.isLoading = false
-      state.marketplace.list = [...state.marketplace.list, ...action.payload]
+    fetchNftUserPreferencesSuccess: (
+      state,
+      action: PayloadAction<NftUserPreferencesReturnType>
+    ) => {
+      state.userPreferences = Remote.Success(action.payload)
     },
+    fetchOpenSeaAsset: (
+      state,
+      action: PayloadAction<{
+        asset_contract_address: string
+        defaultEthAddr: string | undefined
+        token_id: string
+      }>
+    ) => {},
+    fetchOpenSeaAssetFailure: (state, action: PayloadAction<string>) => {
+      state.openSeaAsset = Remote.Failure(action.payload)
+    },
+    fetchOpenSeaAssetLoading: (state) => {
+      state.openSeaAsset = Remote.Loading
+    },
+    fetchOpenSeaAssetSuccess: (state, action: PayloadAction<NftAsset>) => {
+      state.openSeaAsset = Remote.Success(action.payload)
+    },
+    fetchOpenseaStatus: () => {},
+    fetchOpenseaStatusFailure: (state, action: PayloadAction<OpenSeaStatus>) => {
+      state.openSeaStatus = Remote.Failure(action.payload)
+    },
+    fetchOpenseaStatusLoading: (state) => {
+      state.openSeaStatus = Remote.Loading
+    },
+    fetchOpenseaStatusSuccess: (state, action: PayloadAction<OpenSeaStatus>) => {
+      state.openSeaStatus = Remote.Success(action.payload)
+    },
+    handleRouterChange: (state, action: PayloadAction<{ location: { pathname: string } }>) => {},
     nftOrderFlowClose: (state) => {
-      state.orderFlow.activeOrder = null
-      state.orderFlow.step = NftOrderStepEnum.SHOW_ASSET
-      state.orderFlow.asset = Remote.NotAsked
-      state.orderFlow.fees = Remote.NotAsked
-      state.orderFlow.order = Remote.NotAsked
-      state.cancelListing = Remote.NotAsked
-      state.sellOrder = Remote.NotAsked
+      state.orderFlow = initialState.orderFlow
     },
     nftOrderFlowOpen: (
       state,
       action: PayloadAction<
-        { asset: NftAsset; order?: never } | { asset?: never; order: NftOrdersType['orders'][0] }
+        | {
+            asset_contract_address: string
+            seaportOrder: SeaportRawOrder
+            step: NftOrderStepEnum.CANCEL_OFFER
+            token_id: string
+          }
+        | {
+            asset_contract_address: string
+            seaportOrder: SeaportRawOrder
+            step: NftOrderStepEnum.ACCEPT_OFFER
+            token_id: string
+          }
+        | {
+            asset_contract_address: string
+            seaportOrder: SeaportRawOrder
+            step: NftOrderStepEnum.BUY
+            token_id: string
+          }
+        | {
+            asset_contract_address: string
+            seaportOrder: SeaportRawOrder
+            step: NftOrderStepEnum.CANCEL_LISTING
+            token_id: string
+          }
+        | {
+            asset_contract_address: string
+            seaportOrder?: never
+            step: NftOrderStepEnum.MAKE_OFFER
+            token_id: string
+          }
+        | {
+            asset_contract_address: string
+            seaportOrder?: never
+            step: NftOrderStepEnum
+            token_id: string
+          }
+        | {
+            seaportOrder?: never
+            step: NftOrderStepEnum
+          }
       >
     ) => {
-      if (action.payload.order) {
-        state.orderFlow.activeOrder = action.payload.order
+      state.orderFlow.step = action.payload.step
+
+      if (action.payload.seaportOrder) {
+        state.orderFlow.seaportOrder = action.payload.seaportOrder
       }
-      state.orderFlow.asset = Remote.Loading
-      state.orderFlow.step = NftOrderStepEnum.SHOW_ASSET
+      // @ts-ignore
+      if (action.payload.wyvernOrder) {
+        // @ts-ignore
+        state.orderFlow.wyvernOrder = action.payload.wyvernOrder
+      }
+    },
+    nftOrderFlowOpen_LEGACY: (
+      state,
+      action: PayloadAction<
+        | {
+            asset_contract_address: string
+            order: WyvernRawOrder
+            step: NftOrderStepEnum.CANCEL_OFFER
+            token_id: string
+          }
+        | {
+            asset_contract_address: string
+            order: WyvernRawOrder
+            step: NftOrderStepEnum.ACCEPT_OFFER
+            token_id: string
+          }
+        | {
+            asset_contract_address: string
+            order: WyvernRawOrder
+            step: NftOrderStepEnum.BUY
+            token_id: string
+          }
+        | {
+            asset_contract_address: string
+            order: WyvernRawOrder
+            step: NftOrderStepEnum.CANCEL_LISTING
+            token_id: string
+          }
+        | {
+            asset_contract_address: string
+            order?: never
+            step: NftOrderStepEnum.MAKE_OFFER
+            token_id: string
+          }
+        | {
+            asset_contract_address: string
+            order?: never
+            step: NftOrderStepEnum
+            token_id: string
+          }
+      >
+    ) => {
+      state.orderFlow.step = action.payload.step
+
+      if (action.payload.order) {
+        state.orderFlow.wyvernOrder = action.payload.order
+      }
+    },
+    nftSearch: (state, action: PayloadAction<{ search: string }>) => {},
+    nftSearchFailure: (state, action: PayloadAction<string>) => {
+      state.search = Remote.Failure(action.payload)
+    },
+    nftSearchLoading: (state) => {
+      state.search = Remote.Loading
+    },
+    nftSearchSuccess: (state, action: PayloadAction<ExplorerGatewaySearchType>) => {
+      state.search = Remote.Success(action.payload)
     },
     resetNftAssets: (state) => {
       state.assets.atBound = false
@@ -277,30 +493,12 @@ const nftsSlice = createSlice({
       state.assets.isLoading = false
       state.assets.list = []
     },
-    resetNftOffersMade: (state) => {
-      state.offersMade.atBound = false
-      state.offersMade.page = 0
-      state.offersMade.isFailure = false
-      state.offersMade.isLoading = true
-      state.offersMade.list = []
+    resetNftFees: (state) => {
+      state.orderFlow.fees = Remote.NotAsked
     },
-    resetNftOrders: (state) => {
-      state.marketplace.atBound = false
-      state.marketplace.page = 0
-      state.marketplace.token_ids_queried = []
-      state.marketplace.isFailure = false
-      state.marketplace.isLoading = true
-      state.marketplace.list = []
+    setActiveSlug: (state, action: PayloadAction<{ slug: string }>) => {
+      state.activeSlug = action.payload.slug
     },
-    resetOrderFlow: (state) => {
-      state.orderFlow.asset = Remote.NotAsked
-      state.orderFlow.step = NftOrderStepEnum.SHOW_ASSET
-      state.orderFlow.activeOrder = null
-    },
-    searchNftAssetContract: (
-      state,
-      action: PayloadAction<{ asset_contract_address: string }>
-    ) => {},
     setAssetBounds: (state, action: PayloadAction<{ atBound: boolean }>) => {
       state.assets.atBound = action.payload.atBound
     },
@@ -308,33 +506,25 @@ const nftsSlice = createSlice({
       state.assets.collection = action.payload.collection || 'all'
       state.assets.page = action.payload.page || 0
     },
-    setMarketplaceBounds: (state, action: PayloadAction<{ atBound: boolean }>) => {
-      state.marketplace.atBound = action.payload.atBound
+    setNftOrderStatus: (state, action: PayloadAction<NftOrderStatusEnum>) => {
+      state.orderFlow.status = action.payload
     },
-    setMarketplaceData: (
-      state,
-      action: PayloadAction<{
-        atBound?: boolean
-        collection?: CollectionData
-        page?: number
-        token_ids_queried?: string[]
-      }>
-    ) => {
-      state.marketplace.page = action.payload.page || 0
-      if (action.payload.atBound) state.marketplace.atBound = action.payload.atBound
-      if (action.payload.collection) state.marketplace.collection = action.payload.collection
-      if (action.payload.token_ids_queried)
-        state.marketplace.token_ids_queried = action.payload.token_ids_queried
+    setOrderFlowIsSubmitting: (state, action: PayloadAction<boolean>) => {
+      state.orderFlow.isSubmitting = action.payload
     },
-    setOffersMadeBounds: (state, action: PayloadAction<{ atBound: boolean }>) => {
-      state.offersMade.atBound = action.payload.atBound
-    },
-    setOffersMadeData: (state, action: PayloadAction<{ page?: number }>) => {
-      state.assets.page = action.payload.page || 0
+    setOrderFlowPrevStep: (state, action: PayloadAction<{ prevStep: NftOrderStepEnum }>) => {
+      state.orderFlow.prevStep = action.payload.prevStep
     },
     setOrderFlowStep: (state, action: PayloadAction<{ step: NftOrderStepEnum }>) => {
       state.orderFlow.step = action.payload.step
-    }
+    },
+    setViewOrder: (state, action: PayloadAction<{ viewOrder: NftAsset }>) => {
+      state.orderFlow.viewOrder = action.payload.viewOrder
+    },
+    updateUserPreferences: (
+      state,
+      action: PayloadAction<{ userPrefs: NftUserPreferencesType }>
+    ) => {}
   }
 })
 

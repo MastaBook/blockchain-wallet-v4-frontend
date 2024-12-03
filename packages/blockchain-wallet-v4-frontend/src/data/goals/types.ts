@@ -4,23 +4,35 @@ import { ModalNameType } from 'data/modals/types'
 // State
 export type GoalsType =
   | 'airdropClaim'
+  | 'buySell'
+  | 'buy-nft'
+  | 'cowboys2022'
+  | 'dex'
   | 'kyc'
   | 'kycDocResubmit'
+  | 'kycUpgradeRequiredNotice'
+  | 'interest'
+  | 'interestPromo'
   | 'linkAccount'
   | 'payment'
   | 'paymentProtocol'
+  | 'make-offer-nft'
+  | 'nfts'
+  | 'recommendedImportedSweep'
   | 'referral'
-  | 'buySell'
+  | 'rewards'
+  | 'sanctionsNotice'
+  | 'settings'
+  | 'signup'
+  | 'sofiMigrationContinue'
   | 'swap'
   | 'swapGetStarted'
   | 'swapUpgrade'
   | 'syncPit'
+  | 'termsAndConditions'
   | 'transferEth'
   | 'upgradeForAirdrop'
-  | 'walletConnect'
   | 'welcomeModal'
-  | 'interest'
-  | 'interestPromo'
 
 export type GoalType = { data: any; id: string; name: GoalsType }
 export type BuySellWidgetGoalDataType = {
@@ -28,6 +40,19 @@ export type BuySellWidgetGoalDataType = {
   crypto: CoinType
   email?: string
   fiatCurrency: WalletFiatType
+}
+
+export type SignUpGoalDataType = {
+  email?: string
+}
+
+export enum UnifiedAccountRedirectType {
+  CHANGE_2FA = 'change2fa',
+  CHANGE_EMAIL = 'changeEmail',
+  CHANGE_PASSWORD = 'changePassword'
+}
+export enum GeneralRedirectType {
+  EARN = 'earn'
 }
 
 export type GoalsState = {
@@ -43,13 +68,18 @@ export type GoalsState = {
 
 export enum DeepLinkGoal {
   BITCOIN = 'bitcoin',
+  BUY_NFT = 'buy-nft',
+  DEX = 'dex',
+  EARN = 'earn',
   INTEREST = 'interest',
   KYC = 'kyc',
   LINK_ACCOUNT = 'link-account',
   LOG_LEVEL = 'log-level',
+  MAKE_OFFER_NFT = 'make-offer-nft',
+  NFTS = 'nfts',
   REFERRAL = 'referral',
-  REWARDS = 'rewards',
+  REWARDS = 'REWARDS',
+  SETTINGS = 'settings',
   SIMPLE_BUY = 'simple-buy',
-  SWAP = 'swap',
-  WALLET_CONNECT = 'wc'
+  SWAP = 'swap'
 }

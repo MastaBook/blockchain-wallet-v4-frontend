@@ -1,53 +1,67 @@
 import React, { useCallback, useEffect } from 'react'
-import { connect, ConnectedProps } from 'react-redux'
-import { bindActionCreators, Dispatch } from 'redux'
+import { useDispatch } from 'react-redux'
 
-import { Remote } from '@core'
-import { FlyoutOopsError } from 'components/Flyout'
-import { actions, selectors } from 'data'
-import { RootState } from 'data/rootReducer'
+import { WalletFiatType } from '@core/types'
+import { FlyoutOopsError } from 'components/Flyout/Errors'
+import { actions } from 'data'
+import { AddBankStepType, BankDWStepType, BrokerageModalOriginType } from 'data/types'
+import { useRemote } from 'hooks'
 
 import { Loading, LoadingTextEnum } from '../../../../components'
 import { getData } from './selectors'
 import Success from './template.success'
 
-const DepositMethods = (props) => {
-  useEffect(() => {
-    if (props.fiatCurrency && !Remote.Success.is(props.data)) {
-      props.buySellActions.fetchFiatEligible(props.fiatCurrency)
-      props.buySellActions.fetchPaymentMethods(props.fiatCurrency)
-      props.brokerageActions.fetchBankTransferAccounts()
-    }
-  }, [])
-
-  const errorCallback = useCallback(() => {
-    props.brokerageActions.fetchBankTransferAccounts()
-  }, [])
-
-  return props.data.cata({
-    Failure: () => (
-      <FlyoutOopsError action='retry' data-e2e='withdrawReload' handler={errorCallback} />
-    ),
-    Loading: () => <Loading text={LoadingTextEnum.LOADING} />,
-    NotAsked: () => <Loading text={LoadingTextEnum.LOADING} />,
-    Success: (val) => <Success {...val} {...props} />
-  })
+type Props = {
+  fiatCurrency: WalletFiatType
+  handleClose: () => void
 }
 
-const mapStateToProps = (state: RootState) => ({
-  addNew: state.components.brokerage.addNew,
-  data: getData(state),
-  fiatCurrency: selectors.core.settings.getCurrency(state).getOrElse('USD')
-})
+const DepositMethods = ({ fiatCurrency, handleClose }: Props) => {
+  const dispatch = useDispatch()
+  const { data, error, isLoading, isNotAsked } = useRemote(getData)
 
-export const mapDispatchToProps = (dispatch: Dispatch) => ({
-  brokerageActions: bindActionCreators(actions.components.brokerage, dispatch),
-  buySellActions: bindActionCreators(actions.components.buySell, dispatch),
-  formActions: bindActionCreators(actions.form, dispatch)
-})
+  useEffect(() => {
+    if (fiatCurrency) {
+      dispatch(actions.components.buySell.fetchPaymentMethods(fiatCurrency))
+    }
+  }, [dispatch, fiatCurrency])
 
-const connector = connect(mapStateToProps, mapDispatchToProps)
+  const errorCallback = useCallback(() => {
+    dispatch(actions.components.brokerage.fetchBankTransferAccounts())
+  }, [dispatch])
 
-export type Props = ConnectedProps<typeof connector>
+  const addBankCallback = useCallback(() => {
+    dispatch(
+      actions.components.brokerage.showModal({
+        modalType: fiatCurrency === 'USD' ? `ADD_BANK_PLAID_MODAL` : 'ADD_BANK_YAPILY_MODAL',
+        origin: BrokerageModalOriginType.ADD_BANK_DEPOSIT
+      })
+    )
+    dispatch(
+      actions.components.brokerage.setAddBankStep({
+        addBankStep: AddBankStepType.ADD_BANK
+      })
+    )
+    dispatch(
+      actions.components.brokerage.setDWStep({
+        dwStep: BankDWStepType.ENTER_AMOUNT
+      })
+    )
+  }, [dispatch, fiatCurrency])
 
-export default connector(DepositMethods)
+  if (error) {
+    return <FlyoutOopsError action='retry' data-e2e='withdrawReload' handler={errorCallback} />
+  }
+
+  if (isLoading || isNotAsked || !data) return <Loading text={LoadingTextEnum.LOADING} />
+
+  return (
+    <Success
+      handleClose={handleClose}
+      paymentMethods={data.paymentMethods}
+      addBankCallback={addBankCallback}
+    />
+  )
+}
+
+export default DepositMethods

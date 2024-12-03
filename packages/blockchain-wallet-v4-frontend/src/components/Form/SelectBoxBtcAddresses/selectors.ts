@@ -21,7 +21,7 @@ import {
 
 import { Exchange, Remote } from '@core'
 import { ADDRESS_TYPES } from '@core/redux/payment/btc/utils'
-import { InterestAccountBalanceType } from '@core/types'
+import { EarnAccountBalanceResponseType } from '@core/types'
 import { selectors } from 'data'
 import { collapse } from 'utils/helpers'
 
@@ -29,7 +29,7 @@ const allWallets = {
   label: 'All',
   options: [
     {
-      label: 'All BTC Private Key Wallets',
+      label: 'All BTC DeFi Wallets',
       value: 'all'
     }
   ]
@@ -51,24 +51,25 @@ export const getData = (
     exclude?: Array<string>
     excludeHDWallets?: boolean
     excludeImported?: boolean
-    excludeLockbox?: boolean
     forceCustodialFirst?: boolean
+    includeActiveRewards?: boolean
     includeAll?: boolean
     includeCustodial?: boolean
     includeExchangeAddress?: boolean
     includeInterest?: boolean
+    showCustodialFirst?: boolean
   }
 ) => {
   const {
     exclude = [],
     excludeHDWallets,
     excludeImported,
-    excludeLockbox,
+    forceCustodialFirst,
+    includeActiveRewards,
     includeAll = true,
     includeCustodial,
     includeExchangeAddress,
-    includeInterest,
-    forceCustodialFirst
+    includeInterest
   } = ownProps
 
   const buildDisplay = (wallet) => {
@@ -91,7 +92,7 @@ export const getData = (
       })})`
     )
   }
-  const buildInterestDisplay = (x: InterestAccountBalanceType['BTC']) => {
+  const buildInterestDisplay = (x: EarnAccountBalanceResponseType['BTC']) => {
     return (
       `Rewards Account` +
       ` (${Exchange.displayCoinToCoin({
@@ -122,8 +123,22 @@ export const getData = (
             label: buildInterestDisplay(x),
             value: {
               ...x,
-              label: 'Rewards Account',
+              label: 'Passive Rewards Account',
               type: ADDRESS_TYPES.INTEREST
+            }
+          }
+        ]
+      : []
+
+  const toActiveRewardsDropdown = (x) =>
+    x
+      ? [
+          {
+            label: buildInterestDisplay(x),
+            value: {
+              ...x,
+              label: 'Active Rewards Account',
+              type: ADDRESS_TYPES.ACTIVE
             }
           }
         ]
@@ -143,11 +158,13 @@ export const getData = (
       includeExchangeAddress && hasExchangeAddress
         ? exchangeAddress.map(toExchange).map(toGroup('Exchange'))
         : Remote.of([]),
-      selectors.core.common.btc
-        .getActiveAccountsBalances(state)
-        .map(excluded)
-        .map(toDropdown)
-        .map(toGroup('Wallet')),
+      excludeHDWallets
+        ? Remote.of([])
+        : selectors.core.common.btc
+            .getActiveAccountsBalances(state)
+            .map(excluded)
+            .map(toDropdown)
+            .map(toGroup('Wallet')),
       showCustodial || showCustodialWithAddress
         ? selectors.components.buySell
             .getBSBalances(state)
@@ -160,10 +177,17 @@ export const getData = (
         : Remote.of([]),
       includeInterest
         ? selectors.components.interest
-            .getInterestAccountBalance(state)
+            .getPassiveRewardsAccountBalance(state)
             .map((x) => x.BTC)
             .map(toInterestDropdown)
-            .map(toGroup('Rewards Account'))
+            .map(toGroup('Passive Rewards Account'))
+        : Remote.of([]),
+      includeActiveRewards
+        ? selectors.components.interest
+            .getActiveRewardsAccountBalance(state)
+            .map((x) => x.BTC)
+            .map(toActiveRewardsDropdown)
+            .map(toGroup('Active Rewards Account'))
         : Remote.of([]),
       excludeImported
         ? Remote.of([])
@@ -182,16 +206,9 @@ export const getData = (
                 ),
                 x
               )
-            ),
-      excludeLockbox
-        ? Remote.of([])
-        : selectors.core.common.btc
-            .getLockboxBtcBalances(state)
-            .map(excluded)
-            .map(toDropdown)
-            .map(toGroup('Lockbox'))
-    ]).map(([b1, b2, b3, b4, b5]) => {
-      const orderArray = forceCustodialFirst ? [b3, b1, b2, b4, b5] : [b1, b2, b3, b4, b5]
+            )
+    ]).map(([b1, b2, b3, b4, b5, b6]) => {
+      const orderArray = forceCustodialFirst ? [b3, b1, b2, b4, b5, b6] : [b1, b2, b3, b4, b5, b6]
       // @ts-ignore
       const data = reduce(concat, [], orderArray) as array
 

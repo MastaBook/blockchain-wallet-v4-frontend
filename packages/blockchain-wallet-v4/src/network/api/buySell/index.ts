@@ -1,58 +1,70 @@
-import axios from 'axios'
-import { Moment } from 'moment'
 import { v4 as uuidv4 } from 'uuid'
 
 import {
+  BankCredentialsType,
   BankTransferAccountType,
   RecurringBuyNextPayment,
-  RecurringBuyPeriods,
   RecurringBuyRegisteredList,
   UserDataType
 } from 'data/types'
 
-import { CoinType, FiatCurrenciesType, FiatType, WalletCurrencyType } from '../../../types'
-import { NabuCustodialProductType, ProductTypes, WithdrawResponseType } from '../custodial/types'
-import { SwapOrderStateType, SwapOrderType, SwapUserLimitsType } from '../swap/types'
 import {
+  BuyOrderInputDto,
+  CoinType,
+  FiatCurrenciesType,
+  FiatType,
+  WalletCurrencyType
+} from '../../../types'
+import { NabuCustodialProductType, ProductTypes, WithdrawResponseType } from '../custodial/types'
+import { SwapUserLimitsType } from '../swap/types'
+import {
+  ApplePayInfoType,
   BSAccountType,
   BSBalancesType,
   BSCardType,
-  BSMoneyType,
   BSOrderActionType,
   BSOrderType,
   BSPairsType,
   BSPairType,
   BSPaymentMethodsType,
-  BSPaymentMethodType,
   BSPaymentTypes,
-  BSProviderAttributesType,
   BSQuoteType,
   BSTransactionStateType,
   BSTransactionsType,
   BSTransactionType,
+  BuyQuoteType,
   CardAcquirer,
+  CardSuccessRateResponse,
   FiatEligibleType,
-  NabuAddressType
+  GooglePayInfoType,
+  NabuAddressType,
+  OrderConfirmAttributesType,
+  TradesAccumulatedResponse,
+  ValidateApplePayMerchantRequest,
+  ValidateApplePayMerchantResponse
 } from './types'
 
-export default ({
-  authorizedDelete,
-  authorizedGet,
-  authorizedPost,
-  authorizedPut,
-  everypayUrl,
-  get,
-  nabuUrl
-}) => {
-  const activateBSCard = (cardId: BSCardType['id'], customerUrl: string): BSCardType =>
+export default ({ authorizedDelete, authorizedGet, authorizedPost, authorizedPut, nabuUrl }) => {
+  const activateCard = ({
+    cardBeneficiaryId,
+    cvv,
+    redirectUrl
+  }: {
+    cardBeneficiaryId: BSCardType['id']
+    cvv: string
+    redirectUrl: string
+  }): BSCardType =>
     authorizedPost({
       contentType: 'application/json',
       data: {
+        cvv,
         everypay: {
-          customerUrl
-        }
+          customerUrl: redirectUrl
+        },
+        redirectURL: redirectUrl,
+        useOnlyAlreadyValidatedCardRef: true
       },
-      endPoint: `/payments/cards/${cardId}/activate`,
+      endPoint: `/payments/cards/${cardBeneficiaryId}/activate`,
       url: nabuUrl
     })
 
@@ -62,20 +74,39 @@ export default ({
       url: nabuUrl
     })
 
-  const createBSCard = (
-    currency: FiatType,
-    address: NabuAddressType,
+  const createCard = ({
+    address,
+    currency,
+    email,
+    paymentMethodTokens
+  }: {
+    address: NabuAddressType
+    currency: FiatType
     email: UserDataType['email']
-  ): BSCardType =>
+    paymentMethodTokens?: { [key: string]: string }
+  }): BSCardType =>
     authorizedPost({
       contentType: 'application/json',
       data: {
         address,
         currency,
-        email
+        email,
+        paymentMethodTokens
       },
       endPoint: '/payments/cards',
       removeDefaultPostData: true,
+      url: nabuUrl
+    })
+
+  const createAddCardToken = (): {
+    card_token_id: string
+    vgs_public_key: string
+    vgs_vault_id: string
+  } =>
+    authorizedPost({
+      contentType: 'application/json',
+      endPoint: '/payments/cassy/tokenize',
+      ignoreQueryParams: true,
       url: nabuUrl
     })
 
@@ -106,16 +137,17 @@ export default ({
       url: nabuUrl
     })
 
-  const createBSOrder = (
-    pair: BSPairsType,
-    action: BSOrderActionType,
-    pending: boolean,
-    input: BSMoneyType,
-    output: BSMoneyType,
-    paymentType: BSPaymentMethodType['type'],
-    period?: RecurringBuyPeriods,
-    paymentMethodId?: BSCardType['id']
-  ): BSOrderType =>
+  const createOrder = ({
+    action,
+    input,
+    output,
+    pair,
+    paymentMethodId,
+    paymentType,
+    pending,
+    period,
+    quoteId
+  }: BuyOrderInputDto): BSOrderType =>
     authorizedPost({
       contentType: 'application/json',
       data: {
@@ -125,7 +157,8 @@ export default ({
         pair,
         paymentMethodId,
         paymentType,
-        period
+        period,
+        quoteId
       },
       endPoint: `/simple-buy/trades${pending ? '?action=pending' : ''}`,
       removeDefaultPostData: true,
@@ -146,31 +179,48 @@ export default ({
       url: nabuUrl
     })
 
-  const createBankAccountLink = (currency: WalletCurrencyType) =>
+  const createBankAccountLink = (data: {
+    attributes?: {
+      supportedPartners: string[]
+    }
+    currency: WalletCurrencyType
+  }) =>
     authorizedPost({
       contentType: 'application/json',
-      data: {
-        currency
-      },
+      data,
       endPoint: `/payments/banktransfer`,
       removeDefaultPostData: true,
       url: nabuUrl
     })
 
-  const updateBankAccountLink = (bankId: string, attributes) =>
-    authorizedPost({
+  const updateBankAccountLink = (bankId: string, attributes) => {
+    return authorizedPost({
       contentType: 'application/json',
       data: { attributes },
       endPoint: `/payments/banktransfer/${bankId}/update`,
       removeDefaultPostData: true,
       url: nabuUrl
     })
+  }
 
-  const confirmBSOrder = (
-    order: BSOrderType,
-    attributes?: BSProviderAttributesType,
+  const refreshBankAccountLink = (bankId: string, attributes): BankCredentialsType =>
+    authorizedPost({
+      contentType: 'application/json',
+      data: { attributes },
+      endPoint: `/payments/banktransfer/${bankId}/refresh`,
+      removeDefaultPostData: true,
+      url: nabuUrl
+    })
+
+  const confirmBSOrder = ({
+    attributes,
+    order,
+    paymentMethodId
+  }: {
+    attributes?: OrderConfirmAttributesType
+    order: BSOrderType
     paymentMethodId?: string
-  ): BSOrderType =>
+  }): BSOrderType =>
     authorizedPost({
       contentType: 'application/json',
       data: {
@@ -192,7 +242,7 @@ export default ({
   // TODO: move this BROKERAGE component
   const deleteSavedAccount = (
     accountId: BSCardType['id'] | BankTransferAccountType['id'],
-    accountType: 'cards' | 'banktransfer'
+    accountType: 'cards' | 'banktransfer' | 'banks'
   ): BSCardType | BankTransferAccountType =>
     authorizedDelete({
       endPoint: `/payments/${accountType}/${accountId}`,
@@ -218,6 +268,7 @@ export default ({
   const getBSCards = (useNewPaymentProviders: boolean): Array<BSCardType> =>
     authorizedGet({
       endPoint: `/payments/cards?cardProvider=${useNewPaymentProviders}`,
+      ignoreQueryParams: true,
       url: nabuUrl
     })
 
@@ -258,7 +309,7 @@ export default ({
     })
 
   const getBSPairs = (currency?: keyof FiatCurrenciesType): { pairs: Array<BSPairType> } =>
-    get({
+    authorizedGet({
       data: {
         fiatCurrency: currency
       },
@@ -278,14 +329,14 @@ export default ({
 
   const getBSPaymentMethods = (
     currency: FiatType | undefined,
-    includeNonEligibleMethods?: boolean,
+    includeEligibleOnlyPaymentMethods?: boolean,
     includeTierLimits?: number
   ): BSPaymentMethodsType =>
     authorizedGet({
       contentType: 'application/json',
       data: {
         currency,
-        eligibleOnly: includeNonEligibleMethods,
+        eligibleOnly: includeEligibleOnlyPaymentMethods,
         tier: includeTierLimits
       },
       endPoint: '/eligible/payment-methods',
@@ -336,6 +387,26 @@ export default ({
       url: nabuUrl
     })
 
+  const getBuyQuote = (
+    pair: string,
+    profile: 'SIMPLEBUY' | 'SIMPLETRADE' | 'SWAP_FROM_USERKEY' | 'SWAP_INTERNAL' | 'SWAP_ON_CHAIN',
+    inputValue: string,
+    paymentMethod: BSPaymentTypes,
+    paymentMethodId?: string
+  ): BuyQuoteType =>
+    authorizedPost({
+      contentType: 'application/json',
+      data: {
+        inputValue,
+        pair,
+        paymentMethod,
+        paymentMethodId,
+        profile
+      },
+      endPoint: '/brokerage/quote',
+      url: nabuUrl
+    })
+
   type getBSTransactionsType = {
     currency: string
     fromId?: string
@@ -375,69 +446,6 @@ export default ({
           endPoint: '/payments/transactions',
           url: nabuUrl
         })
-  // This is to get unified Sell trades from sellp3 using the swap 2.0 api
-  // Will eventually be used to get all trades, buy/sell/swap included
-  // keeping all the swap types until buy/sell everything else is together
-  const getUnifiedSellTrades = (
-    currency: FiatType,
-    limit?: number,
-    before?: string,
-    after?: string,
-    v2states?: SwapOrderStateType
-  ): Array<SwapOrderType> =>
-    authorizedGet({
-      data: {
-        after,
-        before,
-        currency,
-        limit,
-        states: v2states
-      },
-      endPoint: `/trades/unified`,
-      url: nabuUrl
-    })
-
-  const submitBSCardDetailsToEverypay = ({
-    accessToken,
-    apiUserName,
-    ccNumber,
-    cvc,
-    expirationDate,
-    holderName,
-    nonce
-  }: {
-    accessToken: string
-    apiUserName: string
-    ccNumber: string
-    cvc: string
-    expirationDate: Moment
-    holderName: string
-    nonce: string
-  }) =>
-    axios({
-      data: {
-        api_username: apiUserName,
-        cc_details: {
-          cc_number: ccNumber,
-
-          cvc,
-
-          holder_name: holderName,
-          // months are 0 indexed
-          month: expirationDate.month() + 1,
-          year: expirationDate.year()
-        },
-        nonce: nonce.slice(0, 8),
-        timestamp: new Date().toISOString(),
-        token_consented: true
-      },
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      },
-      method: 'POST',
-      url: `${everypayUrl}/api/v3/mobile_payments/card_details`
-    })
 
   const withdrawBSFunds = (
     address: string,
@@ -474,17 +482,78 @@ export default ({
       url: nabuUrl
     })
 
+  const getAccumulatedTrades = (product: NabuCustodialProductType): TradesAccumulatedResponse =>
+    authorizedGet({
+      contentType: 'application/json',
+      endPoint: `/trades/accumulated?product=${product}`,
+      ignoreQueryParams: true,
+      url: nabuUrl
+    })
+
+  const getApplePayInfo = (currency: FiatType): ApplePayInfoType =>
+    authorizedGet({
+      contentType: 'application/json',
+      endPoint: `/payments/apple-pay/info?currency=${currency}`,
+      ignoreQueryParams: true,
+      url: nabuUrl
+    })
+
+  const validateApplePayMerchant = ({
+    beneficiaryID,
+    domain,
+    validationURL
+  }: ValidateApplePayMerchantRequest): ValidateApplePayMerchantResponse =>
+    authorizedPost({
+      contentType: 'application/json',
+      data: {
+        beneficiaryID,
+        domain,
+        validationURL
+      },
+      endPoint: '/payments/apple-pay/validate-merchant',
+      ignoreQueryParams: true,
+      url: nabuUrl
+    })
+
+  const getGooglePayInfo = (currency: FiatType): GooglePayInfoType =>
+    authorizedGet({
+      contentType: 'application/json',
+      endPoint: `/payments/google-pay/info?currency=${currency}`,
+      ignoreQueryParams: true,
+      url: nabuUrl
+    })
+
+  const checkCardSuccessRate = (bin: string): CardSuccessRateResponse =>
+    authorizedGet({
+      contentType: 'application/json',
+      endPoint: `/payments/cards/success-rate?bin=${bin}`,
+      ignoreQueryParams: true,
+      url: nabuUrl
+    })
+
+  const updateCardCvv = (data: { cvv: string; paymentId: string }) =>
+    authorizedPost({
+      contentType: 'application/json',
+      data,
+      endPoint: '/payments/cassy/charge/cvv',
+      url: nabuUrl
+    })
+
   return {
-    activateBSCard,
+    activateCard,
     cancelBSOrder,
+    checkCardSuccessRate,
     confirmBSOrder,
-    createBSCard,
-    createBSOrder,
+    createAddCardToken,
     createBankAccountLink,
+    createCard,
     createFiatDeposit,
+    createOrder,
     createRecurringBuy,
     deleteRecurringBuy,
     deleteSavedAccount,
+    getAccumulatedTrades,
+    getApplePayInfo,
     getBSBalances,
     getBSCard,
     getBSCards,
@@ -499,13 +568,16 @@ export default ({
     getBSTransactions,
     getBankTransferAccountDetails,
     getBankTransferAccounts,
+    getBuyQuote,
     getCardAcquirers,
+    getGooglePayInfo,
     getPaymentById,
     getRBPaymentInfo,
     getRBRegisteredList,
-    getUnifiedSellTrades,
-    submitBSCardDetailsToEverypay,
+    refreshBankAccountLink,
     updateBankAccountLink,
+    updateCardCvv,
+    validateApplePayMerchant,
     withdrawBSFunds
   }
 }

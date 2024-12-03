@@ -10,8 +10,8 @@ const BaseButton = styled.button.attrs((props) => ({
   justify-content: center;
   align-items: center;
   width: ${(props) => (props.fullwidth ? '100%' : props.width ? props.width : 'auto')};
-  min-width: ${(props) => (props.width ? props.width : '140px')};
-  height: ${(props) => (props.jumbo ? '56px' : props.height)};
+  min-width: ${(props) => (props.small ? '86px' : props.width ? props.width : '140px')};
+  height: ${(props) => (props.jumbo ? '56px' : props.small ? '32px' : props.height)};
   padding: ${(props) => (props.padding ? props.padding : '10px 15px')};
   margin: ${(props) => props.margin};
   box-sizing: border-box;
@@ -86,6 +86,14 @@ const selectColor = (nature, small) => {
         borderColor: 'grey100',
         color: 'blue600',
         hoverBorderColor: 'blue600'
+      }
+    }
+    case 'empty-purple': {
+      return {
+        backgroundColor: 'white',
+        borderColor: 'grey100',
+        color: 'purple600',
+        hoverBorderColor: 'purple600'
       }
     }
     case 'empty-red': {
@@ -206,6 +214,7 @@ const Button = (props) => {
   return (
     <BaseButton
       {...rest}
+      small={small}
       disabled={disabled}
       color={color}
       backgroundColor={backgroundColor}

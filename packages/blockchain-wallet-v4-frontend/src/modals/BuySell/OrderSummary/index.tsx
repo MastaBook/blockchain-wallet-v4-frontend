@@ -1,20 +1,13 @@
 import React, { PureComponent } from 'react'
 import { connect, ConnectedProps } from 'react-redux'
-import { equals } from 'ramda'
 import { bindActionCreators, Dispatch } from 'redux'
 
 import { Exchange, Remote } from '@core'
-import {
-  BSOrderType,
-  BSPaymentMethodType,
-  BSPaymentTypes,
-  ExtractSuccess,
-  OrderType,
-  RemoteDataType
-} from '@core/types'
-import DataError from 'components/DataError'
-import { OrderSummary } from 'components/Flyout'
+import { BSPaymentMethodType, ExtractSuccess, OrderType } from '@core/types'
+import BaseError from 'components/BuySell/Error'
+import { OrderSummary } from 'components/Flyout/Brokerage'
 import { getPeriodForSuccess } from 'components/Flyout/model'
+import { GenericNabuErrorFlyout } from 'components/GenericNabuErrorFlyout'
 import { actions, model, selectors } from 'data'
 import {
   getBaseAmount,
@@ -30,11 +23,10 @@ import {
   RecurringBuyPeriods,
   RecurringBuyStepType
 } from 'data/types'
+import { isNabuError } from 'services/errors'
 
 import Loading from '../template.loading'
-import InterestBanner from './InterestBanner'
 import { getData } from './selectors'
-import SuccessSdd from './template.sdd.success'
 
 const { getSymbol } = Exchange
 const { FORM_BS_CHECKOUT } = model.components.buySell
@@ -45,48 +37,12 @@ class OrderSummaryContainer extends PureComponent<Props> {
       this.props.buySellActions.fetchCards(false)
       this.props.sendActions.getLockRule()
       this.props.recurringBuyActions.fetchRegisteredList()
-      this.props.recurringBuyActions.fetchPaymentInfo()
     }
 
     this.props.buySellActions.fetchOrders()
 
-    if (this.props.order.state === 'PENDING_DEPOSIT') {
-      if (
-        (this.props.order.attributes?.cardProvider?.cardAcquirerName === 'EVERYPAY' &&
-          this.props.order.attributes?.cardProvider?.paymentState === 'WAITING_FOR_3DS_RESPONSE') ||
-        this.props.order.attributes?.everypay?.paymentState === 'WAITING_FOR_3DS_RESPONSE'
-      ) {
-        this.props.buySellActions.setStep({
-          order: this.props.order,
-          step: '3DS_HANDLER_EVERYPAY'
-        })
-      }
-
-      if (
-        this.props.order.attributes?.cardProvider?.cardAcquirerName === 'STRIPE' &&
-        this.props.order.attributes?.cardProvider?.paymentState === 'WAITING_FOR_3DS_RESPONSE'
-      ) {
-        this.props.buySellActions.setStep({
-          order: this.props.order,
-          step: '3DS_HANDLER_STRIPE'
-        })
-      }
-
-      if (
-        this.props.order.attributes?.cardProvider?.cardAcquirerName === 'CHECKOUTDOTCOM' &&
-        this.props.order.attributes?.cardProvider?.paymentState === 'WAITING_FOR_3DS_RESPONSE'
-      ) {
-        this.props.buySellActions.setStep({
-          order: this.props.order,
-          step: '3DS_HANDLER_CHECKOUTDOTCOM'
-        })
-      }
-    }
-    this.props.interestActions.fetchShowInterestCardAfterTransaction({})
-  }
-
-  handleRefresh = () => {
-    this.props.buySellActions.fetchCards(false)
+    this.props.interestActions.fetchInterestEligible()
+    this.props.interestActions.fetchInterestRates()
   }
 
   handleOkButton = () => {
@@ -111,40 +67,30 @@ class OrderSummaryContainer extends PureComponent<Props> {
     }
   }
 
-  handleCompleteButton = () => {
-    if (
-      this.props.order.attributes?.cardProvider?.cardAcquirerName === 'EVERYPAY' ||
-      this.props.order.attributes?.everypay
-    ) {
-      this.props.buySellActions.setStep({
-        order: this.props.order,
-        step: '3DS_HANDLER_EVERYPAY'
-      })
-    }
-
-    if (this.props.order.attributes?.cardProvider?.cardAcquirerName === 'STRIPE') {
-      this.props.buySellActions.setStep({
-        order: this.props.order,
-        step: '3DS_HANDLER_STRIPE'
-      })
-    }
-
-    if (this.props.order.attributes?.cardProvider?.cardAcquirerName === 'CHECKOUTDOTCOM') {
-      this.props.buySellActions.setStep({
-        order: this.props.order,
-        step: '3DS_HANDLER_CHECKOUTDOTCOM'
-      })
-    }
+  handleErrorAction = () => {
+    this.props.buySellActions.destroyCheckout()
   }
 
   render() {
-    const { order } = this.props
-    const { state } = order
     return this.props.data.cata({
-      Failure: () => <DataError onClick={this.handleRefresh} />,
+      Failure: (e) => {
+        if (isNabuError(e)) {
+          return <GenericNabuErrorFlyout error={e} onDismiss={this.handleErrorAction} />
+        }
+
+        return (
+          <BaseError
+            code={e}
+            handleRetry={this.handleErrorAction}
+            handleReset={this.handleErrorAction}
+            handleBack={this.handleErrorAction}
+          />
+        )
+      },
       Loading: () => <Loading />,
       NotAsked: () => <Loading />,
       Success: (val) => {
+        const { interestEligible, interestRates, order } = val
         const currencySymbol = getSymbol(getCounterCurrency(order))
         const [recurringBuy] = val.recurringBuyList.filter((rb) => {
           return rb.id === order.recurringBuyId
@@ -152,48 +98,137 @@ class OrderSummaryContainer extends PureComponent<Props> {
         const frequencyText =
           recurringBuy && getPeriodForSuccess(recurringBuy.period, recurringBuy.nextPayment)
 
-        return state === 'FAILED' || state === 'CANCELED' || !order.paymentType ? (
-          <DataError onClick={this.handleRefresh} />
-        ) : val.userData?.tiers?.current !== 2 ? (
-          <SuccessSdd {...val} {...this.props} />
+        if (order.state === 'PENDING_DEPOSIT') {
+          if (
+            (order.attributes?.cardProvider?.cardAcquirerName === 'EVERYPAY' &&
+              order.attributes?.cardProvider?.paymentState === 'WAITING_FOR_3DS_RESPONSE') ||
+            order.attributes?.everypay?.paymentState === 'WAITING_FOR_3DS_RESPONSE' ||
+            (order.attributes?.cardCassy?.cardAcquirerName === 'EVERYPAY' &&
+              order.attributes?.cardCassy?.paymentState === 'WAITING_FOR_3DS_RESPONSE')
+          ) {
+            this.props.buySellActions.setStep({
+              step: '3DS_HANDLER_EVERYPAY'
+            })
+          } else if (
+            (order.attributes?.cardProvider?.cardAcquirerName === 'STRIPE' &&
+              order.attributes?.cardProvider?.paymentState === 'WAITING_FOR_3DS_RESPONSE') ||
+            (order.attributes?.cardCassy?.cardAcquirerName === 'STRIPE' &&
+              order.attributes?.cardCassy?.paymentState === 'WAITING_FOR_3DS_RESPONSE')
+          ) {
+            this.props.buySellActions.setStep({
+              step: '3DS_HANDLER_STRIPE'
+            })
+          } else if (
+            (order.attributes?.cardProvider?.cardAcquirerName === 'CHECKOUTDOTCOM' &&
+              order.attributes?.cardProvider?.paymentState === 'WAITING_FOR_3DS_RESPONSE') ||
+            (order.attributes?.cardCassy?.cardAcquirerName === 'CHECKOUTDOTCOM' &&
+              order.attributes?.cardCassy?.paymentState === 'WAITING_FOR_3DS_RESPONSE')
+          ) {
+            this.props.buySellActions.setStep({
+              step: '3DS_HANDLER_CHECKOUTDOTCOM'
+            })
+          } else if (
+            (order.attributes?.cardProvider?.cardAcquirerName === 'FAKE_CARD_ACQUIRER' &&
+              order.attributes?.cardProvider?.paymentState === 'WAITING_FOR_3DS_RESPONSE') ||
+            (order.attributes?.cardCassy?.cardAcquirerName === 'FAKE_CARD_ACQUIRER' &&
+              order.attributes?.cardCassy?.paymentState === 'WAITING_FOR_3DS_RESPONSE')
+          ) {
+            this.props.buySellActions.setStep({
+              step: '3DS_HANDLER_FAKE_CARD_ACQUIRER'
+            })
+          } else if (
+            order.attributes?.cardCassy?.paymentState !== 'SETTLED' &&
+            order.attributes?.needCvv
+          ) {
+            // It's possible for needCvv to be true and paymentState to be `WAITING_FOR_3DS_RESPONSE` in which case we
+            // want to do 3DS (because we already did cvv update) so this block needs to stay below the 3DS check blocks above
+            this.props.buySellActions.setStep({
+              step: 'UPDATE_SECURITY_CODE'
+            })
+          }
+        }
+
+        if (
+          order.state === 'PENDING_CONFIRMATION' &&
+          order.attributes?.cardCassy?.paymentState !== 'SETTLED' &&
+          order.attributes?.needCvv
+        ) {
+          // In case that it's in PENDING_CONFIRMATION state we need to and need tp update CVV we have t show modal
+          this.props.buySellActions.setStep({
+            step: 'UPDATE_SECURITY_CODE'
+          })
+        }
+
+        const handleCompleteButton = () => {
+          if (
+            order.attributes?.cardProvider?.cardAcquirerName === 'EVERYPAY' ||
+            order.attributes?.everypay
+          ) {
+            this.props.buySellActions.setStep({
+              step: '3DS_HANDLER_EVERYPAY'
+            })
+          }
+
+          if (order.attributes?.cardProvider?.cardAcquirerName === 'STRIPE') {
+            this.props.buySellActions.setStep({
+              step: '3DS_HANDLER_STRIPE'
+            })
+          }
+
+          if (order.attributes?.cardProvider?.cardAcquirerName === 'CHECKOUTDOTCOM') {
+            this.props.buySellActions.setStep({
+              step: '3DS_HANDLER_CHECKOUTDOTCOM'
+            })
+          }
+
+          if (order.attributes?.cardProvider?.cardAcquirerName === 'FAKE_CARD_ACQUIRER') {
+            this.props.buySellActions.setStep({
+              step: '3DS_HANDLER_FAKE_CARD_ACQUIRER'
+            })
+          }
+        }
+
+        return order.state === 'FAILED' || order.state === 'CANCELED' || !order.paymentType ? (
+          <BaseError
+            code='INTERNAL_SERVER_ERROR'
+            handleRetry={this.handleErrorAction}
+            handleReset={this.handleErrorAction}
+            handleBack={this.handleErrorAction}
+          />
         ) : (
           <OrderSummary
+            analyticsActions={this.props.analyticsActions}
             baseAmount={getBaseAmount(order)}
             baseCurrency={getBaseCurrency(order)}
-            counterAmount={`${currencySymbol}${getCounterAmount(order)}`}
+            counterAmount={getCounterAmount(order)}
             currencySymbol={currencySymbol}
+            frequencyText={frequencyText}
             handleClose={this.props.handleClose}
-            handleCompleteButton={this.handleCompleteButton}
+            handleCompleteButton={handleCompleteButton}
             handleOkButton={this.handleOkButton}
+            interestActions={this.props.interestActions}
+            interestEligible={interestEligible}
+            interestRates={interestRates}
             lockTime={val.lockTime}
-            orderState={state}
+            orderState={order.state}
             orderType={getOrderType(order) as OrderType}
             outputCurrency={order.outputCurrency}
             paymentState={order.attributes?.everypay?.paymentState || null}
             paymentType={order.paymentType}
-            frequencyText={frequencyText}
-          >
-            {getOrderType(order) === OrderType.BUY &&
-              (order.paymentType === BSPaymentTypes.PAYMENT_CARD ||
-                order.paymentType === BSPaymentTypes.USER_CARD ||
-                order.paymentType === BSPaymentTypes.BANK_TRANSFER ||
-                order.paymentType === BSPaymentTypes.FUNDS)}
-            {val.afterTransaction.show && <InterestBanner handleClose={this.props.handleClose} />}
-          </OrderSummary>
+          />
         )
       }
     })
   }
 }
 
-const mapStateToProps = (state: RootState, ownProps: OwnProps): LinkStatePropsType => ({
+const mapStateToProps = (state: RootState, ownProps: OwnProps) => ({
   data: getData(state),
   formValues: selectors.form.getFormValues(FORM_BS_CHECKOUT)(state) as BSCheckoutFormValuesType,
   hasAvailablePeriods: selectors.components.recurringBuy.hasAvailablePeriods(ownProps.method)(
     state
   ),
   hasQuote: selectors.components.buySell.hasQuote(state),
-  isGoldVerified: equals(selectors.modules.profile.getCurrentTier(state), 2),
   isRecurringBuy: selectors.core.walletOptions
     .getFeatureFlagRecurringBuys(state)
     .getOrElse(false) as boolean,
@@ -201,8 +236,10 @@ const mapStateToProps = (state: RootState, ownProps: OwnProps): LinkStatePropsTy
 })
 
 const mapDispatchToProps = (dispatch: Dispatch) => ({
+  analyticsActions: bindActionCreators(actions.analytics, dispatch),
   buySellActions: bindActionCreators(actions.components.buySell, dispatch),
   interestActions: bindActionCreators(actions.components.interest, dispatch),
+  modalActions: bindActionCreators(actions.modals, dispatch),
   recurringBuyActions: bindActionCreators(actions.components.recurringBuy, dispatch),
   sendActions: bindActionCreators(actions.components.send, dispatch)
 })
@@ -211,20 +248,10 @@ const connector = connect(mapStateToProps, mapDispatchToProps)
 export type OwnProps = {
   handleClose: () => void
   method?: BSPaymentMethodType
-  order: BSOrderType
 }
 
 export type SuccessStateType = ExtractSuccess<ReturnType<typeof getData>>
 
-type LinkStatePropsType = {
-  data: RemoteDataType<string, SuccessStateType>
-  formValues: BSCheckoutFormValuesType
-  hasAvailablePeriods: boolean
-  hasQuote: boolean
-  isGoldVerified: boolean
-  isRecurringBuy: boolean
-  orders: BSOrderType[]
-}
 export type Props = OwnProps & ConnectedProps<typeof connector>
 
 export default connector(OrderSummaryContainer)

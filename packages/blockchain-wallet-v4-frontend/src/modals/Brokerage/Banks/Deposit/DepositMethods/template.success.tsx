@@ -1,16 +1,19 @@
 import React, { ReactElement } from 'react'
 import { FormattedMessage } from 'react-intl'
+import { useDispatch } from 'react-redux'
 import styled from 'styled-components'
 
-import { BSPaymentMethodsType, BSPaymentMethodType, BSPaymentTypes } from '@core/types'
+import { BSPaymentMethodsType, BSPaymentMethodType, BSPaymentTypes, FiatType } from '@core/types'
 import { Icon, Image, Text } from 'blockchain-info-components'
 import { FlyoutWrapper } from 'components/Flyout'
-import { AddBankStepType, BankDWStepType, BrokerageModalOriginType } from 'data/types'
+import { actions } from 'data'
+import { BankDWStepType } from 'data/types'
 
 // TODO: move to somewhere more generic
 import BankWire from '../../../../BuySell/PaymentMethods/Methods/BankWire'
-import { mapDispatchToProps, Props as _P } from '.'
 import BankDeposit from './BankDeposit'
+
+const currenciesForBankTransferLabel: FiatType[] = ['EUR', 'GBP', 'ARS']
 
 const Wrapper = styled.section`
   display: flex;
@@ -59,11 +62,16 @@ const getType = (value: BSPaymentMethodType) => {
     case BSPaymentTypes.BANK_TRANSFER:
     case BSPaymentTypes.LINK_BANK:
     default:
-      return <FormattedMessage id='modals.simplebuy.banklink' defaultMessage='Link a Bank' />
+      return (
+        <FormattedMessage
+          id='modals.simplebuy.easybanktransfer'
+          defaultMessage='Easy Bank Transfer'
+        />
+      )
     case BSPaymentTypes.BANK_ACCOUNT:
       let text
-      if (value.currency === 'EUR' || value.currency === 'GBP') {
-        text = <FormattedMessage id='buttons.transfer' defaultMessage='Transfer' />
+      if (currenciesForBankTransferLabel.includes(value.currency)) {
+        text = <FormattedMessage id='buttons.transfer' defaultMessage='Bank Transfer' />
       } else {
         text = <FormattedMessage id='modals.simplebuy.bankwire' defaultMessage='Wire Transfer' />
       }
@@ -71,7 +79,8 @@ const getType = (value: BSPaymentMethodType) => {
   }
 }
 
-const Success = ({ addNew, brokerageActions, close, fiatCurrency, paymentMethods }: Props) => {
+const Success = ({ addBankCallback, handleClose, paymentMethods }: Props) => {
+  const dispatch = useDispatch()
   const bankTransfer = paymentMethods.methods.find(
     (method) => method.type === BSPaymentTypes.BANK_TRANSFER
   )
@@ -96,9 +105,7 @@ const Success = ({ addNew, brokerageActions, close, fiatCurrency, paymentMethods
             size='20px'
             color='grey600'
             role='button'
-            onClick={() => {
-              close()
-            }}
+            onClick={handleClose}
           />
         </TopText>
       </WrapperHeader>
@@ -106,29 +113,7 @@ const Success = ({ addNew, brokerageActions, close, fiatCurrency, paymentMethods
         {bankTransfer && (
           <BankDeposit
             icon={getIcon(bankTransfer)}
-            onClick={() => {
-              /* If I'm on the deposit method screen and I came from the user
-                 clicking the "add new" button I want to show the add bank 
-                 modal else I want to go to the enter amount screen
-              */
-              if (addNew) {
-                brokerageActions.showModal({
-                  modalType:
-                    fiatCurrency === 'USD' ? 'ADD_BANK_YODLEE_MODAL' : 'ADD_BANK_YAPILY_MODAL',
-                  origin: BrokerageModalOriginType.ADD_BANK_DEPOSIT
-                })
-                brokerageActions.setAddBankStep({
-                  addBankStep: AddBankStepType.ADD_BANK
-                })
-                brokerageActions.setDWStep({
-                  dwStep: BankDWStepType.ENTER_AMOUNT
-                })
-              } else {
-                brokerageActions.setDWStep({
-                  dwStep: BankDWStepType.ENTER_AMOUNT
-                })
-              }
-            }}
+            onClick={addBankCallback}
             value={bankTransfer}
           />
         )}
@@ -136,9 +121,11 @@ const Success = ({ addNew, brokerageActions, close, fiatCurrency, paymentMethods
           <BankWire
             icon={getIcon(bankWire)}
             onClick={() => {
-              brokerageActions.setDWStep({
-                dwStep: BankDWStepType.WIRE_INSTRUCTIONS
-              })
+              dispatch(
+                actions.components.brokerage.setDWStep({
+                  dwStep: BankDWStepType.WIRE_INSTRUCTIONS
+                })
+              )
             }}
             text={getType(bankWire)}
             value={bankWire}
@@ -150,9 +137,9 @@ const Success = ({ addNew, brokerageActions, close, fiatCurrency, paymentMethods
 }
 
 type Props = {
-  close: () => void
+  addBankCallback: () => void
+  handleClose: () => void
   paymentMethods: BSPaymentMethodsType
-} & ReturnType<typeof mapDispatchToProps> &
-  _P
+}
 
 export default Success

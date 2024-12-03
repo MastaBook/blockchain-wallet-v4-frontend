@@ -2,21 +2,22 @@ import BigNumber from 'bignumber.js'
 import * as ethers from 'ethers'
 import { equals, head, identity, includes, path, pathOr, prop, propOr } from 'ramda'
 import { change, destroy, initialize, startSubmit, stopSubmit } from 'redux-form'
-import { call, delay, put, select, take } from 'redux-saga/effects'
+import { call, put, select, take } from 'redux-saga/effects'
 
 import { Exchange } from '@core'
 import { APIType } from '@core/network/api'
 import { ADDRESS_TYPES } from '@core/redux/payment/btc/utils'
 import { EthAccountFromType } from '@core/redux/payment/eth/types'
-import { Erc20CoinType, EthPaymentType, WalletAcountEnum } from '@core/types'
+import { Erc20CoinType, EthPaymentType, WalletAccountEnum } from '@core/types'
 import { errorHandler } from '@core/utils'
 import { calculateFee } from '@core/utils/eth'
 import { actions, actionTypes, selectors } from 'data'
+import { ModalName } from 'data/types'
 import * as C from 'services/alerts'
-import * as Lockbox from 'services/lockbox'
 import { promptForSecondPassword } from 'services/sagas'
 
 import sendSagas from '../send/sagas'
+import { emojiRegex } from '../send/types'
 import * as A from './actions'
 import * as AT from './actionTypes'
 import { FORM } from './model'
@@ -27,10 +28,12 @@ import {
   SendEthFormDescActionType,
   SendEthFormFeeActionType,
   SendEthFormFromActionType,
-  SendEthFormToActionType
+  SendEthFormToActionType,
+  SendEthFormValue
 } from './types'
 
 const ETH = 'ETH'
+const SEND_ETH_FORM = '@SEND.ETH.FORM'
 export const logLocation = 'components/sendEth/sagas'
 
 export default ({ api, coreSagas, networks }: { api: APIType; coreSagas; networks }) => {
@@ -78,6 +81,7 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas; network
   }
 
   const destroyed = function* () {
+    yield put(A.clearSendEthMaxCustodialWithdrawalFee())
     yield put(actions.form.destroy(FORM))
   }
 
@@ -98,6 +102,11 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas; network
   }
 
   const formChanged = function* (action: SendEthFormActionType) {
+    const formValues: SendEthFormValue = yield select(selectors.form.getFormValues(SEND_ETH_FORM))
+    const maxWithdrawalFee = (yield select(S.getMaxCustodialWithdrawalFee)).getOrElse('')
+    const fiatCurrency = (yield select(selectors.core.settings.getCurrency)).getOrElse('USD')
+    const fromAccount = formValues?.from
+    const amount = formValues?.amount?.coin || '0'
     try {
       const { form } = action.meta
       if (!equals(FORM, form)) return
@@ -109,31 +118,65 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas; network
         payment: p.getOrElse({})
       })
 
+      const setWithdrawalFee = function* () {
+        const withdrawalAmount = Exchange.convertCoinToCoin({
+          baseToStandard: false,
+          coin,
+          value: amount
+        })
+        const response: ReturnType<typeof api.getCustodialToNonCustodialWithdrawalFees> =
+          yield call(api.getCustodialToNonCustodialWithdrawalFees, {
+            amount: withdrawalAmount,
+            currency: coin,
+            fiatCurrency,
+            paymentMethod: 'CRYPTO_TRANSFER'
+          })
+
+        const fee = response.totalFees.amount.value
+        if (fromAccount && fromAccount.type === 'CUSTODIAL') {
+          payment = yield payment.from(
+            fromAccount.label,
+            fromAccount.type,
+            new BigNumber(fromAccount.withdrawable).minus(fee).toString()
+          )
+          payment = yield payment.fee(new BigNumber(fee).toNumber(), '', coin)
+        }
+        yield put(A.sendEthPaymentUpdatedSuccess(payment.value()))
+      }
+
+      const setMaxWithdrawalFee = function* () {
+        const response: ReturnType<typeof api.getMaxCustodialWithdrawalFee> = yield call(
+          api.getMaxCustodialWithdrawalFee,
+          {
+            currency: coin,
+            fiatCurrency,
+            paymentMethod: 'CRYPTO_TRANSFER'
+          }
+        )
+        const fee = response.totalFees.amount.value
+        if (fromAccount && fromAccount.type === 'CUSTODIAL') {
+          payment = yield payment.from(
+            fromAccount.label,
+            fromAccount.type,
+            new BigNumber(fromAccount.withdrawable).minus(fee).toString()
+          )
+          payment = yield payment.fee(new BigNumber(fee).toNumber(), '', coin)
+        }
+        yield put(A.sendEthPaymentUpdatedSuccess(payment.value()))
+        yield put(A.sendEthFetchMaxCustodialWithdrawalFeeSuccess(response.totalFees.amount.value))
+      }
+
       switch (action.meta.field) {
         case 'from':
           const fromPayload = payload as SendEthFormFromActionType['payload']
-          let source
           switch (fromPayload.type) {
-            case 'LOCKBOX':
             case 'ACCOUNT':
-              source = fromPayload.address
-              payment = yield payment.from(source, fromPayload.type)
+              yield put(A.initialized(coin))
               break
             case 'CUSTODIAL':
-              const response: ReturnType<typeof api.getWithdrawalFees> = yield call(
-                api.getWithdrawalFees,
-                'simplebuy',
-                'DEFAULT'
+              yield call(
+                amount === '0' && maxWithdrawalFee === '' ? setMaxWithdrawalFee : setWithdrawalFee
               )
-              const fee = response.fees.find(({ symbol }) => symbol === coin)?.minorValue || '0'
-              source = fromPayload.label
-              payment = yield payment.from(
-                source,
-                fromPayload.type,
-                new BigNumber(fromPayload.withdrawable).minus(fee).toString()
-              )
-              payment = yield payment.fee(new BigNumber(fee).toNumber(), '', coin)
-              yield put(A.sendEthPaymentUpdatedSuccess(payment.value()))
               yield put(change(FORM, 'to', null))
               break
             default:
@@ -142,14 +185,16 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas; network
         case 'to':
           const toPayload = payload as SendEthFormToActionType['payload']
           const value = pathOr(toPayload, ['value', 'value'], toPayload)
-          if (includes('.', value as unknown as string)) {
-            yield put(
-              actions.components.send.fetchUnstoppableDomainResults(
-                value as unknown as string,
-                coin
+          if (typeof value === 'string') {
+            if (includes('.', value) || (value as string).match(emojiRegex)) {
+              yield put(
+                actions.components.send.fetchUnstoppableDomainResults(
+                  value as unknown as string,
+                  coin
+                )
               )
-            )
-            return
+              return
+            }
           }
           // @ts-ignore
           payment = yield payment.to(value)
@@ -170,9 +215,9 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas; network
               yield put(
                 A.sendEthFetchLimits(
                   coin,
-                  WalletAcountEnum.CUSTODIAL,
+                  WalletAccountEnum.CUSTODIAL,
                   coin,
-                  WalletAcountEnum.NON_CUSTODIAL,
+                  WalletAccountEnum.NON_CUSTODIAL,
                   currency
                 )
               )
@@ -184,12 +229,18 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas; network
           return
         case 'amount':
           const amountPayload = payload as SendEthFormAmountActionType['payload']
-          const coinCode = prop('coinCode', amountPayload)
           const weiAmount = Exchange.convertCoinToCoin({
             baseToStandard: false,
-            coin: coinCode,
+            coin,
             value: amountPayload.coin
           })
+          if (fromAccount?.type === 'CUSTODIAL') {
+            yield call(
+              new BigNumber(weiAmount).isGreaterThan(new BigNumber(fromAccount?.withdrawable))
+                ? setMaxWithdrawalFee
+                : setWithdrawalFee
+            )
+          }
           payment = yield payment.amount(weiAmount)
           break
         case 'description':
@@ -249,65 +300,33 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas; network
       payment: p.getOrElse({})
     })
     const fromType = payment.value().from.type
-    const toAddress = path(['to', 'address'], payment.value())
-    const fromAddress = path(['from', 'address'], payment.value())
     const { isRetryAttempt } = payment.value()
 
     try {
       // Sign payment
-      if (fromType !== 'LOCKBOX') {
-        const password = yield call(promptForSecondPassword)
-        if (fromType !== 'CUSTODIAL') {
-          // @ts-ignore
-          payment = yield payment.sign(password, null, null)
-        }
-      } else if (fromType === 'LOCKBOX') {
-        const device = (yield select(
-          selectors.core.kvStore.lockbox.getDeviceFromEthAddr,
-          fromAddress
-        )).getOrFail('missing_device')
-        const deviceType = prop('device_type', device)
-        yield call(Lockbox.promptForLockbox, ETH, deviceType, [toAddress])
-        const connection = yield select(selectors.components.lockbox.getCurrentConnection)
-        const transport = prop('transport', connection)
-        const scrambleKey = Lockbox.utils.getScrambleKey(ETH, deviceType)
+      const password = yield call(promptForSecondPassword)
+      if (fromType !== 'CUSTODIAL') {
         // @ts-ignore
-        payment = yield payment.sign(null, transport, scrambleKey)
+        payment = yield payment.sign(password, null, null)
       }
       // Publish payment
       if (fromType === 'CUSTODIAL') {
         const value = payment.value()
         if (!value.to) throw new Error('missing_to_from_custodial')
         if (!value.amount) throw new Error('missing_amount_from_custodial')
-        yield call(api.withdrawBSFunds, value.to.address, coin, value.amount)
+        if (!value.fee) throw new Error('missing_fee_from_custodial')
+        yield call(api.withdrawBSFunds, value.to.address, coin, value.amount, value.fee)
       } else {
         payment = yield payment.publish()
       }
       yield put(A.sendEthPaymentUpdatedSuccess(payment.value()))
       // Update metadata
-      if (fromType === ADDRESS_TYPES.LOCKBOX) {
-        const device = (yield select(
-          selectors.core.kvStore.lockbox.getDeviceFromEthAddr,
-          fromAddress
-        )).getOrFail('missing_device')
-        const deviceIndex = prop('device_index', device)
-        yield put(
-          actions.core.kvStore.lockbox.setLatestTxTimestampEthLockbox(deviceIndex, Date.now())
-        )
-        yield take(actionTypes.core.kvStore.lockbox.FETCH_METADATA_LOCKBOX_SUCCESS)
-        yield put(
-          actions.core.kvStore.lockbox.setLatestTxEthLockbox(deviceIndex, payment.value().txId)
-        )
-      } else {
-        yield put(actions.core.kvStore.eth.setLatestTxTimestampEth(Date.now()))
-        yield take(actionTypes.core.kvStore.eth.FETCH_METADATA_ETH_SUCCESS)
-        yield put(actions.core.kvStore.eth.setLatestTxEth(payment.value().txId))
-      }
+      yield put(actions.core.kvStore.eth.setLatestTxTimestampEth(Date.now()))
+      yield take(actionTypes.core.kvStore.eth.FETCH_METADATA_ETH_SUCCESS)
+      yield put(actions.core.kvStore.eth.setLatestTxEth(payment.value().txId))
       // Notes
       if (path(['description', 'length'], payment.value())) {
-        if (fromType !== ADDRESS_TYPES.LOCKBOX) {
-          yield take(actionTypes.core.kvStore.eth.FETCH_METADATA_ETH_SUCCESS)
-        }
+        yield take(actionTypes.core.kvStore.eth.FETCH_METADATA_ETH_SUCCESS)
         if (coinfig.type.erc20Address) {
           yield put(
             actions.core.kvStore.eth.setTxNotesErc20(
@@ -322,31 +341,20 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas; network
         )
       }
       // Display success
-      if (fromType === ADDRESS_TYPES.LOCKBOX) {
-        yield put(actions.components.lockbox.setConnectionSuccess())
-        yield delay(4000)
-        const device = (yield select(
-          selectors.core.kvStore.lockbox.getDeviceFromEthAddr,
-          fromAddress
-        )).getOrFail('missing_device')
-        const deviceIndex = prop('device_index', device)
-        yield put(actions.router.push(`/lockbox/dashboard/${deviceIndex}`))
+      yield put(actions.router.push(`/coins/${coin}`))
+      if (coin === ETH) {
+        yield put(actions.core.data.eth.fetchTransactions(null, true))
       } else {
-        yield put(actions.router.push(`/${coin}/transactions`))
-        if (coin === ETH) {
-          yield put(actions.core.data.eth.fetchTransactions(null, true))
-        } else {
-          yield put(actions.core.data.eth.fetchErc20Transactions(coin, true))
-        }
-        yield put(
-          actions.alerts.displaySuccess(
-            isRetryAttempt ? C.RESEND_COIN_SUCCESS : C.SEND_COIN_SUCCESS,
-            {
-              coinName: coinfig.name
-            }
-          )
-        )
+        yield put(actions.core.data.eth.fetchErc20Transactions(coin, true))
       }
+      yield put(
+        actions.alerts.displaySuccess(
+          isRetryAttempt ? C.RESEND_COIN_SUCCESS : C.SEND_COIN_SUCCESS,
+          {
+            coinName: coinfig.name
+          }
+        )
+      )
       const coinAmount = Exchange.convertCoinToCoin({
         coin,
         value: payment.value().amount || 0
@@ -362,23 +370,19 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas; network
       yield put(stopSubmit(FORM))
       // Set errors
       const error = errorHandler(e)
-      if (fromType === ADDRESS_TYPES.LOCKBOX) {
-        yield put(actions.components.lockbox.setConnectionError(e))
-      } else {
-        yield put(actions.logs.logErrorMessage(logLocation, 'secondStepSubmitClicked', e))
-        if (fromType === ADDRESS_TYPES.CUSTODIAL && error) {
-          if (error === 'Pending withdrawal locks') {
-            yield call(showWithdrawalLockAlert)
-          } else {
-            yield put(actions.alerts.displayError(error))
-          }
+      yield put(actions.logs.logErrorMessage(logLocation, 'secondStepSubmitClicked', e))
+      if (fromType === ADDRESS_TYPES.CUSTODIAL && error) {
+        if (error === 'Pending withdrawal locks') {
+          yield call(showWithdrawalLockAlert)
         } else {
-          yield put(
-            actions.alerts.displayError(C.SEND_COIN_ERROR, {
-              coinName: coinfig.name
-            })
-          )
+          yield put(actions.alerts.displayError(error))
         }
+      } else {
+        yield put(
+          actions.alerts.displayError(C.SEND_COIN_ERROR, {
+            coinName: coinfig.name
+          })
+        )
       }
     }
   }
@@ -507,7 +511,7 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas; network
       }
 
       yield put(
-        actions.modals.showModal('SEND_ETH_MODAL', {
+        actions.modals.showModal(ModalName.SEND_ETH_MODAL, {
           coin,
           origin: 'RetrySendEth'
         })

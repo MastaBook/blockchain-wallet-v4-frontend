@@ -2,39 +2,52 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit'
 
 import { Remote } from '@core'
-import { AuthStateType } from 'data/types'
+import { RemoteDataType } from '@core/remote/types'
+
+import {
+  AccountUnificationFlows,
+  AuthStateType,
+  AuthUserType,
+  ExchangeLoginFailureType,
+  ExchangeLoginSuccessType,
+  ExchangeLoginType,
+  ExchangeResetPasswordSuccessType,
+  LoginFailureType,
+  LoginPayloadType,
+  LoginSuccessType,
+  MagicLinkRequestPayloadType,
+  PlatformTypes,
+  ProductAuthMetadata,
+  ProductAuthOptions
+} from './types'
 
 const initialState: AuthStateType = {
   auth_type: 0,
   authorizeVerifyDevice: Remote.NotAsked,
-  firstLogin: false,
+  exchangeAuth: {
+    exchangeLogin: Remote.NotAsked,
+    resetPassword: Remote.NotAsked
+  },
   isAuthenticated: false,
   isLoggingIn: false,
-  kycReset: undefined,
   login: Remote.NotAsked,
-  magicLinkData: null,
-  magicLinkDataEncoded: undefined,
   manifestFile: null,
-  metadataRestore: Remote.NotAsked,
   mobileLoginStarted: false,
-  registerEmail: undefined,
-  registering: Remote.NotAsked,
+  productAuthMetadata: {
+    platform: PlatformTypes.WEB
+  },
   resetAccount: false,
-  restoring: Remote.NotAsked,
-  secureChannelLogin: Remote.NotAsked,
-  userGeoData: Remote.NotAsked
+  secureChannelLogin: Remote.NotAsked
 }
 
 const authSlice = createSlice({
   initialState,
   name: 'auth',
   reducers: {
-    analyticsAuthorizeVerifyDeviceFailure: (state, action) => {},
-    analyticsAuthorizeVerifyDeviceSuccess: () => {},
     authenticate: (state) => {
       state.isAuthenticated = true
     },
-    authorizeVerifyDevice: () => {},
+    authorizeVerifyDevice: (state, action?) => {},
     authorizeVerifyDeviceFailure: (state, action) => {
       state.authorizeVerifyDevice = Remote.Failure(action.payload)
     },
@@ -44,37 +57,50 @@ const authSlice = createSlice({
     authorizeVerifyDeviceSuccess: (state, action) => {
       state.authorizeVerifyDevice = Remote.Success(action.payload)
     },
-
     clearLoginError: (state) => {
       state.login = Remote.NotAsked
+      state.exchangeAuth.exchangeLogin = Remote.NotAsked
     },
-    getUserGeoLocation: () => {},
+    continueLoginProcess: () => {},
+    exchangeLogin: (state, action: PayloadAction<ExchangeLoginType>) => {},
+    exchangeLoginFailure: (state, action: PayloadAction<ExchangeLoginFailureType>) => {
+      state.exchangeAuth.exchangeLogin = Remote.Failure(action.payload)
+    },
+    exchangeLoginLoading: (state) => {
+      state.exchangeAuth.exchangeLogin = Remote.Loading
+    },
+    exchangeLoginSuccess: (state, action: PayloadAction<ExchangeLoginSuccessType>) => {
+      state.exchangeAuth.exchangeLogin = Remote.Success(action.payload)
+    },
+    exchangeResetPassword: (state, action: PayloadAction<string>) => {},
+    exchangeResetPasswordFailure: (state) => {
+      state.exchangeAuth.resetPassword = Remote.Failure(null)
+    },
+    exchangeResetPasswordLoading: (state) => {
+      state.exchangeAuth.resetPassword = Remote.Loading
+    },
+    exchangeResetPasswordNotAsked: (state) => {
+      state.exchangeAuth.resetPassword = Remote.NotAsked
+    },
+    exchangeResetPasswordSuccess: (
+      state,
+      action: PayloadAction<ExchangeResetPasswordSuccessType>
+    ) => {
+      state.exchangeAuth.resetPassword = Remote.Success(action.payload)
+    },
     initializeLogin: () => {},
-    initializeLoginFailure: () => {},
-    initializeLoginLoading: () => {},
-    initializeLoginSuccess: () => {},
-    logWrongChangeCache: () => {},
-    logWrongReceiveCache: () => {},
-    login: (state, action) => {
+    login: (state, action: PayloadAction<LoginPayloadType>) => {
       state.isLoggingIn = true
     },
-    loginFailure: (state, action) => {
+    loginFailure: (state, action: PayloadAction<LoginFailureType>) => {
       state.login = Remote.Failure(action.payload)
     },
-    loginIdEntered: (state, action) => {},
     loginLoading: (state) => {
       state.login = Remote.Loading
     },
-    loginMethodSelected: (state, action) => {},
-    loginPasswordDenied: () => {},
-    loginPasswordEntered: () => {},
-    loginRoutine: (state, action) => {},
-    loginSuccess: (state, action) => {
+    loginSuccess: (state, action: PayloadAction<LoginSuccessType>) => {
       state.login = Remote.Success(action.payload)
     },
-    loginTwoStepVerificationDenied: () => {},
-    loginTwoStepVerificationEntered: () => {},
-    magicLinkParsed: () => {},
     mobileLogin: (state, action) => {},
     mobileLoginFinish: (state) => {
       state.mobileLoginStarted = false
@@ -82,45 +108,7 @@ const authSlice = createSlice({
     mobileLoginStarted: (state) => {
       state.mobileLoginStarted = true
     },
-    needHelpClicked: (state, action) => {},
-    pingManifestFile: () => {},
-    recoveryOptionSelected: (state, action) => {},
-    recoveryPhraseEntered: () => {},
-    register: (state, action) => {},
-    registerFailure: (state, action) => {
-      state.registering = Remote.Failure(action.payload)
-    },
-    registerLoading: (state) => {
-      state.registering = Remote.Loading
-    },
-    registerSuccess: (state, action) => {
-      state.registering = Remote.Success(action.payload)
-    },
-    resendSmsCode: (state, action) => {},
-    resetAccount: (state, action) => {},
-    resetAccountCancelled: (state, action) => {},
-    resetAccountClicked: (state, action) => {},
-    resetAccountFailure: () => {},
-    resetAccountLoading: () => {},
-    resetAccountSuccess: () => {},
-    restore: (state, action) => {},
-    restoreFailure: () => {},
-    restoreFromMetadata: (state, action) => {},
-    restoreFromMetadataFailure: (state, action) => {
-      state.metadataRestore = Remote.Failure(action.payload)
-    },
-    restoreFromMetadataLoading: (state) => {
-      state.metadataRestore = Remote.Loading
-    },
-    restoreFromMetadataSuccess: (state, action) => {
-      state.metadataRestore = Remote.Success(action.payload)
-    },
-    restoreLoading: (state) => {
-      state.restoring = Remote.Loading
-    },
-    restoreSuccess: (state, action) => {
-      state.restoring = Remote.Success(action.payload)
-    },
+    resendSmsCode: (state, action: PayloadAction<{ email?: string; guid?: string }>) => {},
     secureChannelLoginFailure: (state, action: PayloadAction<string>) => {
       state.secureChannelLogin = Remote.Failure(action.payload)
     },
@@ -130,46 +118,60 @@ const authSlice = createSlice({
     secureChannelLoginNotAsked: (state) => {
       state.secureChannelLogin = Remote.NotAsked
     },
-    secureChannelLoginSuccess: (state, action) => {
-      state.secureChannelLogin = Remote.Success(action.payload)
+    secureChannelLoginSuccess: (
+      state,
+      action: PayloadAction<RemoteDataType<string, undefined>>
+    ) => {
+      state.secureChannelLogin = action.payload
+    },
+    sendLoginMessageToMobile: () => {},
+    setAccountUnificationFlowType: (state, action: PayloadAction<AccountUnificationFlows>) => {
+      state.accountUnificationFlow = action.payload
     },
     setAuthType: (state, action) => {
       state.auth_type = action.payload
     },
-    setFirstLogin: (state, action) => {
-      state.firstLogin = action.payload
+    setExchangeAccountConflict: (
+      state,
+      action: PayloadAction<AuthStateType['exchangeAuth']['exchangeAccountConflict']>
+    ) => {
+      state.exchangeAuth.exchangeAccountConflict = action.payload
     },
-    setKycResetStatus: (state, action) => {
-      state.kycReset = action.payload
+    setExchangeAccountCreationFailure: (
+      state,
+      action: PayloadAction<AuthStateType['exchangeAuth']['exchangeAccountFailure']>
+    ) => {
+      state.exchangeAuth.exchangeAccountFailure = action.payload
     },
-    setMagicLinkInfo: (state, action) => {
+    setIsSofi: (state, action: PayloadAction<AuthStateType['isSofi']>) => {
+      state.isSofi = action.payload
+    },
+    setJwtToken: (state, action: PayloadAction<AuthStateType['exchangeAuth']['jwtToken']>) => {
+      state.exchangeAuth.jwtToken = action.payload
+    },
+    setMagicLinkInfo: (state, action: PayloadAction<AuthStateType['magicLinkData']>) => {
       state.magicLinkData = action.payload
     },
-    setMagicLinkInfoEncoded: (state, action) => {
+    setMagicLinkInfoEncoded: (
+      state,
+      action: PayloadAction<AuthStateType['magicLinkDataEncoded']>
+    ) => {
       state.magicLinkDataEncoded = action.payload
     },
-    setManifestFile: (state, action) => {
-      state.manifestFile = action.payload
+    setProductAuthMetadata: (state, action: PayloadAction<ProductAuthMetadata>) => {
+      const { ipCountry, platform, product, redirect, sessionIdMobile, userType } = action.payload
+      state.productAuthMetadata = {
+        ipCountry,
+
+        platform: platform?.toUpperCase() as PlatformTypes,
+        product: product?.toUpperCase() as ProductAuthOptions,
+        redirect,
+        sessionIdMobile,
+        userType: userType?.toUpperCase() as AuthUserType
+      }
     },
-    setRegisterEmail: (state, action) => {
-      state.registerEmail = action.payload
-    },
-    setResetAccount: (state, action) => {
-      state.resetAccount = action.payload
-    },
-    setResetLogin: (state, action) => {
-      state.resetAccount = action.payload
-    },
-    setUserGeoLocation: (state, action) => {
-      state.userGeoData = action.payload
-    },
-    signupDetailsEntered: (state, action) => {},
     startLogoutTimer: () => {},
-    triggerWalletMagicLink: (state, action) => {},
-    triggerWalletMagicLinkFailure: () => {},
-    triggerWalletMagicLinkLoading: () => {},
-    triggerWalletMagicLinkNotAsked: () => {},
-    triggerWalletMagicLinkSuccess: () => {}
+    triggerWalletMagicLink: (state, action: PayloadAction<MagicLinkRequestPayloadType>) => {}
   }
 })
 

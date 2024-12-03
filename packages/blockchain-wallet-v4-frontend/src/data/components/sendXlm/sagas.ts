@@ -1,24 +1,25 @@
 import BigNumber from 'bignumber.js'
 import { equals, head, identity, includes, last, path, pathOr, prop, propOr } from 'ramda'
 import { change, destroy, initialize, startSubmit, stopSubmit, touch } from 'redux-form'
-import { call, delay, put, select } from 'redux-saga/effects'
+import { call, put, select } from 'redux-saga/effects'
 
 import { Exchange } from '@core'
 import { APIType } from '@core/network/api'
 import { ADDRESS_TYPES } from '@core/redux/payment/btc/utils'
-import { AddressTypesType, CustodialFromType, WalletAcountEnum, XlmPaymentType } from '@core/types'
+import { AddressTypesType, CustodialFromType, WalletAccountEnum, XlmPaymentType } from '@core/types'
 import { errorHandler } from '@core/utils'
 import { actions, selectors } from 'data'
 import * as C from 'services/alerts'
-import * as Lockbox from 'services/lockbox'
 import { promptForSecondPassword } from 'services/sagas'
 
 import sendSagas from '../send/sagas'
+import { emojiRegex } from '../send/types'
 import * as A from './actions'
 import { FORM } from './model'
 import * as S from './selectors'
 
 const coin = 'XLM'
+const SEND_XLM_FORM = '@SEND.XLM.FORM'
 export const logLocation = 'components/sendXlm/sagas'
 export const INITIAL_MEMO_TYPE = 'text'
 
@@ -107,10 +108,16 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
   }
 
   const destroyed = function* () {
+    yield put(A.clearSendXlmMaxCustodialWithdrawalFee())
     yield put(actions.form.destroy(FORM))
   }
 
   const formChanged = function* (action) {
+    const formValues = yield select(selectors.form.getFormValues(SEND_XLM_FORM))
+    const maxWithdrawalFee = (yield select(S.getMaxCustodialWithdrawalFee)).getOrElse('')
+    const fiatCurrency = (yield select(selectors.core.settings.getCurrency)).getOrElse('USD')
+    const fromAccount = formValues?.from
+    const amount = formValues?.amount?.coin || '0'
     try {
       const form = path(['meta', 'form'], action)
       if (!equals(FORM, form)) return
@@ -119,32 +126,66 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
       let payment: XlmPaymentType = (yield select(S.getPayment)).getOrElse({})
       payment = yield call(coreSagas.payment.xlm.create, { payment })
 
+      const setWithdrawalFee = function* () {
+        const withdrawalAmount = Exchange.convertCoinToCoin({
+          baseToStandard: false,
+          coin: 'XLM',
+          value: amount
+        })
+
+        const response: ReturnType<typeof api.getCustodialToNonCustodialWithdrawalFees> =
+          yield call(api.getCustodialToNonCustodialWithdrawalFees, {
+            amount: withdrawalAmount,
+            currency: 'XLM',
+            fiatCurrency,
+            paymentMethod: 'CRYPTO_TRANSFER'
+          })
+
+        const fee = response.totalFees.amount.value
+        if (fromAccount?.type === 'CUSTODIAL') {
+          payment = yield call(setFrom, payment, fromAccount, fromAccount.type, fee)
+          payment = yield payment.fee(fee)
+        }
+        yield put(A.paymentUpdatedSuccess(payment.value()))
+      }
+
+      const setMaxWithdrawalFee = function* () {
+        const response: ReturnType<typeof api.getMaxCustodialWithdrawalFee> = yield call(
+          api.getMaxCustodialWithdrawalFee,
+          {
+            currency: 'XLM',
+            fiatCurrency,
+            paymentMethod: 'CRYPTO_TRANSFER'
+          }
+        )
+        const fee = response.totalFees.amount.value
+        if (fromAccount && fromAccount.type === 'CUSTODIAL') {
+          payment = yield call(setFrom, payment, fromAccount, fromAccount.type, fee)
+          payment = yield payment.fee(fee)
+        }
+        yield put(A.paymentUpdatedSuccess(payment.value()))
+        yield put(A.sendXlmFetchMaxCustodialWithdrawalFeeSuccess(response.totalFees.amount.value))
+      }
       switch (field) {
         case 'from':
           const source = prop('address', payload) || payload
           const fromType = prop('type', payload)
           if (fromType === 'CUSTODIAL') {
-            const response: ReturnType<typeof api.getWithdrawalFees> = yield call(
-              api.getWithdrawalFees,
-              'simplebuy',
-              'DEFAULT'
+            yield call(
+              amount === '0' && maxWithdrawalFee === '' ? setMaxWithdrawalFee : setWithdrawalFee
             )
-            const fee = response.fees.find(({ symbol }) => symbol === coin)?.minorValue || '0'
-            payment = yield call(setFrom, payment, payload, fromType, fee)
-            payment = yield payment.fee(fee)
-            yield put(A.paymentUpdatedSuccess(payment.value()))
             yield put(change(FORM, 'to', null))
           } else {
             payment = yield call(setFrom, payment, source, fromType)
           }
           break
         case 'to':
-          // payload may be either an account type (wallet/lockbox) or an address
+          // payload may be either an account type wallet or an address
           const value = pathOr(payload, ['value', 'value'], payload)
           // @ts-ignore
           const splitValue = propOr(value, 'address', value).split(':')
           const address = head(splitValue)
-          if (includes('.', address as unknown as string)) {
+          if (includes('.', address as unknown as string) || address.match(emojiRegex)) {
             yield put(
               actions.components.send.fetchUnstoppableDomainResults(
                 value as unknown as string,
@@ -175,9 +216,9 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
             yield put(
               A.sendXlmFetchLimits(
                 coin,
-                WalletAcountEnum.CUSTODIAL,
+                WalletAccountEnum.CUSTODIAL,
                 coin,
-                WalletAcountEnum.NON_CUSTODIAL,
+                WalletAccountEnum.NON_CUSTODIAL,
                 currency
               )
             )
@@ -188,9 +229,16 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
           const xlmAmount = prop('coin', payload)
           const stroopAmount = Exchange.convertCoinToCoin({
             baseToStandard: false,
-            coin,
+            coin: 'XLM',
             value: xlmAmount
           })
+          if (fromAccount?.type === 'CUSTODIAL') {
+            yield call(
+              new BigNumber(stroopAmount).isGreaterThan(new BigNumber(fromAccount?.withdrawable))
+                ? setMaxWithdrawalFee
+                : setWithdrawalFee
+            )
+          }
           payment = yield call(payment.amount, stroopAmount)
           break
         case 'description':
@@ -298,34 +346,21 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
     let payment = (yield select(S.getPayment)).getOrElse({})
     payment = yield call(coreSagas.payment.xlm.create, { payment })
     const fromType = path(['from', 'type'], payment.value())
-    const toAddress = path(['to', 'address'], payment.value())
-    const fromAddress = path(['from', 'address'], payment.value())
     try {
       // Sign payment
-      if (fromType !== ADDRESS_TYPES.LOCKBOX) {
-        const password = yield call(promptForSecondPassword)
-        if (fromType !== ADDRESS_TYPES.CUSTODIAL) {
-          payment = yield call(payment.sign, password)
-        }
-      } else {
-        const device = (yield select(
-          selectors.core.kvStore.lockbox.getDeviceFromXlmAddr,
-          fromAddress
-        )).getOrFail('missing_device')
-        const deviceType = prop('device_type', device)
-        yield call(Lockbox.promptForLockbox, coin, deviceType, [toAddress])
-        const connection = yield select(selectors.components.lockbox.getCurrentConnection)
-        const transport = prop('transport', connection)
-        const scrambleKey = Lockbox.utils.getScrambleKey(coin, deviceType)
-        payment = yield call(payment.sign, null, transport, scrambleKey)
+      const password = yield call(promptForSecondPassword)
+      if (fromType !== ADDRESS_TYPES.CUSTODIAL) {
+        payment = yield call(payment.sign, password)
       }
+
       const value: ReturnType<XlmPaymentType['value']> = payment.value()
       // Publish payment
       if (fromType === 'CUSTODIAL') {
         if (!value.to) throw new Error('missing_to_from_custodial')
         if (!value.amount) throw new Error('missing_amount_from_custodial')
         const address = value.memo ? `${value.to.address}:${value.memo}` : value.to.address
-        api.withdrawBSFunds(address, coin, value.amount)
+        if (!value.fee) throw new Error('missing_fee_from_custodial')
+        yield call(api.withdrawBSFunds, address, coin, value.amount, value.fee)
       } else {
         payment = yield call(payment.publish)
       }
@@ -334,23 +369,12 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
       const { description } = value
       if (description) yield put(actions.core.kvStore.xlm.setTxNotesXlm(value.txId, description))
       // Display success
-      if (fromType === ADDRESS_TYPES.LOCKBOX) {
-        yield put(actions.components.lockbox.setConnectionSuccess())
-        yield delay(4000)
-        const device = (yield select(
-          selectors.core.kvStore.lockbox.getDeviceFromXlmAddr,
-          fromAddress
-        )).getOrFail('missing_device')
-        const deviceIndex = prop('device_index', device)
-        yield put(actions.router.push(`/lockbox/dashboard/${deviceIndex}`))
-      } else {
-        yield put(actions.router.push('/xlm/transactions'))
-        yield put(
-          actions.alerts.displaySuccess(C.SEND_COIN_SUCCESS, {
-            coinName: 'Stellar'
-          })
-        )
-      }
+      yield put(actions.router.push('/coins/XLM'))
+      yield put(
+        actions.alerts.displaySuccess(C.SEND_COIN_SUCCESS, {
+          coinName: 'Stellar'
+        })
+      )
       yield put(destroy(FORM))
       const coinAmount = Exchange.convertCoinToCoin({
         coin,
@@ -366,23 +390,19 @@ export default ({ api, coreSagas, networks }: { api: APIType; coreSagas: any; ne
       yield put(stopSubmit(FORM))
       // Set errors
       const error = errorHandler(e)
-      if (fromType === ADDRESS_TYPES.LOCKBOX) {
-        yield put(actions.components.lockbox.setConnectionError(e))
-      } else {
-        yield put(actions.logs.logErrorMessage(logLocation, 'secondStepSubmitClicked', e))
-        if (fromType === ADDRESS_TYPES.CUSTODIAL && error) {
-          if (error === 'Pending withdrawal locks') {
-            yield call(showWithdrawalLockAlert)
-          } else {
-            yield put(actions.alerts.displayError(error))
-          }
+      yield put(actions.logs.logErrorMessage(logLocation, 'secondStepSubmitClicked', e))
+      if (fromType === ADDRESS_TYPES.CUSTODIAL && error) {
+        if (error === 'Pending withdrawal locks') {
+          yield call(showWithdrawalLockAlert)
         } else {
-          yield put(
-            actions.alerts.displayError(C.SEND_COIN_ERROR, {
-              coinName: 'Stellar'
-            })
-          )
+          yield put(actions.alerts.displayError(error))
         }
+      } else {
+        yield put(
+          actions.alerts.displayError(C.SEND_COIN_ERROR, {
+            coinName: 'Stellar'
+          })
+        )
       }
     }
   }

@@ -1,6 +1,7 @@
 import { delay, put, take } from 'redux-saga/effects'
 
 import { actions, actionTypes } from 'data'
+import { ModalName } from 'data/types'
 
 export const logLocation = 'components/onboarding/sagas'
 
@@ -11,7 +12,7 @@ export default () => {
     try {
       yield put(actions.form.startSubmit('airdropClaim'))
       yield put(actions.modules.profile.setCampaign({ name: campaign }))
-      yield put(actions.components.identityVerification.registerUserCampaign(false))
+      yield put(actions.components.identityVerification.registerUserCampaign({ newUser: false }))
       // Buffer for tagging user
       yield delay(3000)
       yield put(actions.modules.profile.fetchUser())
@@ -19,7 +20,7 @@ export default () => {
       yield put(actions.form.stopSubmit('airdropClaim'))
       yield put(actions.modals.closeAllModals())
       yield put(
-        actions.modals.showModal('AIRDROP_SUCCESS_MODAL', {
+        actions.modals.showModal(ModalName.AIRDROP_SUCCESS_MODAL, {
           origin: 'AirdropClaimGoal'
         })
       )
@@ -44,13 +45,14 @@ export default () => {
     }
   }
 
+  // This should be removed since we do not have airdrop anymore
   const upgradeForAirdropSubmitClicked = function* ({ payload }) {
     const { campaign } = payload
     try {
       yield put(actions.preferences.hideUpgradeForAirdropModal())
       yield put(actions.modals.closeModal())
       yield put(actions.modules.profile.setCampaign({ name: campaign }))
-      yield put(actions.components.identityVerification.createRegisterUserCampaign())
+      yield put(actions.components.identityVerification.createRegisterUserCampaign({}))
     } catch (e) {
       yield put(actions.logs.logErrorMessage(logLocation, 'upgradeForAirdropSubmitClicked', e))
     }

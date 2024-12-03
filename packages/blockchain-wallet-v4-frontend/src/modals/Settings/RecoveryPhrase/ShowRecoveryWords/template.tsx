@@ -52,14 +52,14 @@ const WordsList = ({ handleBackArrow, handleNextButton, step, words }) => {
           <Text color='grey800' size='20px' weight={600}>
             <FormattedMessage
               id='modals.recoveryphrase.firstsetwords.header_new'
-              defaultMessage='Secret Private Key Recovery Phrase'
+              defaultMessage='Recovery Phrase'
             />
           </Text>
         </Header>
         <Text color='grey600' weight={500}>
           <FormattedMessage
             id='modals.recoveryphrase.firstsetwords.body_new'
-            defaultMessage='Carefully write down these 12 words in order. Do not email or screenshot your Secret Private Key Recovery Phrase.'
+            defaultMessage='Carefully write down these 12 words in order. Do not email or screenshot your Recovery Phrase.'
           />
         </Text>
       </FlyoutWrapper>
@@ -67,7 +67,7 @@ const WordsList = ({ handleBackArrow, handleNextButton, step, words }) => {
         words.map((word, index) => {
           if (index < 6) {
             return (
-              <WordBox>
+              <WordBox className='notranslate'>
                 <WordText data-e2e='backupWords'>
                   <Title>{index + 1}</Title>
                   <Value>{word}</Value>
@@ -75,12 +75,13 @@ const WordsList = ({ handleBackArrow, handleNextButton, step, words }) => {
               </WordBox>
             )
           }
+          return null
         })}
       {step === 'SECOND_SET_WORDS' &&
         words.map((word, index) => {
           if (index >= 6) {
             return (
-              <WordBox>
+              <WordBox className='notranslate'>
                 <WordText data-e2e='backupWords'>
                   <Title>{index + 1}</Title>
                   <Value>{word}</Value>
@@ -88,6 +89,7 @@ const WordsList = ({ handleBackArrow, handleNextButton, step, words }) => {
               </WordBox>
             )
           }
+          return null
         })}
       <Bottom>
         <Button

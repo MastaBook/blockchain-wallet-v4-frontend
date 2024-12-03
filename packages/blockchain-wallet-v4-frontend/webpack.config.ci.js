@@ -1,6 +1,5 @@
 const chalk = require('chalk')
-const BundleAnalyzerPlugin = require('webpack-bundle-analyzer')
-  .BundleAnalyzerPlugin
+const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin
 const CopyWebpackPlugin = require('copy-webpack-plugin')
 const webpackBuilder = require('./webpackBuilder')
 const CONFIG_PATH = require('../../config/paths')
@@ -10,11 +9,11 @@ const runBundleAnalyzer = process.env.ANALYZE
 let extraPluginsList = [
   new CopyWebpackPlugin({
     patterns: [
-      {
-        force: true,
-        from: CONFIG_PATH.legacyPages,
-        to: CONFIG_PATH.ciBuild + '/legacy-pages'
-      },
+      // {
+      //   force: true,
+      //   from: CONFIG_PATH.legacyPages,
+      //   to: CONFIG_PATH.ciBuild + '/legacy-pages'
+      // },
       {
         force: true,
         from: CONFIG_PATH.wellKnownConfig,

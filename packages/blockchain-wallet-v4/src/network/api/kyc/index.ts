@@ -1,9 +1,9 @@
-import { SDDEligibleType, SDDVerifiedType } from './types'
+import { CountryScopeType, ExtraQuestionsType, KycFlowsType, VerifiedType } from './types'
 
-export default ({ authorizedGet, authorizedPost, get, nabuUrl, post }) => {
-  const getSupportedCountries = () =>
+export default ({ authorizedGet, authorizedPost, authorizedPut, get, nabuUrl, post }) => {
+  const getSupportedCountries = (scope: CountryScopeType) =>
     get({
-      data: { scope: 'kyc' },
+      data: { scope },
       endPoint: '/countries',
       url: nabuUrl
     })
@@ -31,13 +31,6 @@ export default ({ authorizedGet, authorizedPost, get, nabuUrl, post }) => {
   const fetchUploadData = (token) =>
     get({
       endPoint: `/upload/data/${token}`,
-      url: nabuUrl
-    })
-
-  const fetchSDDEligible = (): SDDEligibleType =>
-    get({
-      endPoint: `/sdd/eligible`,
-      ignoreQueryParams: true,
       url: nabuUrl
     })
 
@@ -96,27 +89,46 @@ export default ({ authorizedGet, authorizedPost, get, nabuUrl, post }) => {
       url: nabuUrl
     })
 
-  const sendDeeplink = () =>
+  const sendDeepLink = () =>
     authorizedPost({
       contentType: 'application/json',
       endPoint: '/kyc/verifications/mobile-email',
       url: nabuUrl
     })
 
-  const fetchSDDVerified = (): SDDVerifiedType =>
+  const fetchKYCExtraQuestions = (context): ExtraQuestionsType =>
     authorizedGet({
       contentType: 'application/json',
-      endPoint: `/sdd/verified`,
+      data: { context },
+      endPoint: '/kyc/extra-questions',
+      ignoreQueryParams: false,
+      url: nabuUrl
+    })
+
+  const updateKYCExtraQuestions = (extraQuestions: ExtraQuestionsType): VerifiedType =>
+    authorizedPut({
+      contentType: 'application/json',
+      data: { context: extraQuestions.context, nodes: extraQuestions.nodes },
+      endPoint: '/kyc/extra-questions',
       ignoreQueryParams: true,
       url: nabuUrl
     })
 
+  const fetchKYCFlows = (entryPoint?: string): KycFlowsType =>
+    authorizedGet({
+      contentType: 'application/json',
+      data: { entryPoint },
+      endPoint: '/flows/kyc',
+      ignoreQueryParams: false,
+      url: nabuUrl
+    })
+
   return {
+    fetchKYCExtraQuestions,
+    fetchKYCFlows,
     fetchKycAddresses,
     fetchKycConfig,
     fetchPreIdvData,
-    fetchSDDEligible,
-    fetchSDDVerified,
     fetchTiers,
     fetchUploadData,
     fetchVeriffUrl,
@@ -124,8 +136,9 @@ export default ({ authorizedGet, authorizedPost, get, nabuUrl, post }) => {
     getSupportedCountries,
     getSupportedDocuments,
     selectTier,
-    sendDeeplink,
+    sendDeepLink,
     syncVeriff,
+    updateKYCExtraQuestions,
     uploadDocuments
   }
 }

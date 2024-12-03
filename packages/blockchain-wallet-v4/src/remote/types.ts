@@ -1,14 +1,14 @@
 import Remote from './index'
 
-const cata = function <E, A>(
+const cata = function <E, A, R>(
   this: RemoteDataType<E, A>,
   obj: {
-    Failure: (error: E) => E | React.ReactNode
-    Loading: () => React.ReactNode
-    NotAsked: () => React.ReactNode
-    Success: (data: A) => A | React.ReactNode
+    Failure: (error: E) => R
+    Loading: () => R
+    NotAsked: () => R
+    Success: (data: A) => R
   }
-): E | A | React.ReactNode {
+): R {
   switch (this['@@tag']) {
     case 'RemoteNotAsked': {
       return obj.NotAsked()
@@ -19,18 +19,12 @@ const cata = function <E, A>(
     case 'RemoteFailure': {
       return obj.Failure(this.error)
     }
-    case 'RemoteSuccess': {
-      return obj.Success(this.data)
-    }
     default:
-    // no-action
+      return obj.Success(this.data)
   }
 }
 
-const getOrElse = function <A, DV>(
-  this: RemoteDataType<any, A>,
-  defaultValue: DV extends A ? DV : A
-): DV | A {
+const getOrElse = function <A, DV>(this: RemoteDataType<any, A>, defaultValue: DV): DV | A {
   return this.data || defaultValue
 }
 
@@ -45,7 +39,7 @@ const getOrFail = function <A, EV>(this: RemoteDataType<any, A>, errorValue: EV)
 const map = function <E, A, T>(
   this: RemoteDataType<E, A>,
   f: (x: A) => T
-): RemoteSuccess<ReturnType<typeof f>> {
+): RemoteDataType<E, ReturnType<typeof f>> {
   return Remote.Success(f(this.data))
 }
 

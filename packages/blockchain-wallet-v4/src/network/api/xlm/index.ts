@@ -1,8 +1,8 @@
 import { compose, head, prop } from 'ramda'
-import * as StellarSDK from 'stellar-sdk'
+import { Server } from 'stellar-sdk'
 
 export default ({ apiUrl, get, horizonUrl }) => {
-  const server = new StellarSDK.Server(horizonUrl)
+  const server = new Server(horizonUrl)
   const createXlmAccount = (publicKey) =>
     get({
       data: { addr: publicKey },
@@ -16,9 +16,17 @@ export default ({ apiUrl, get, horizonUrl }) => {
 
   const getXlmFees = () =>
     get({
-      endPoint: '/mempool/fees/xlm',
+      endPoint: '/currency/xlm/fees/xlm',
+      ignoreQueryParams: true,
       url: apiUrl
-    })
+    }).then((response) => ({
+      limits: {
+        max: parseInt(response.LIMITS.max, 10),
+        min: parseInt(response.LIMITS.min, 10)
+      },
+      priority: parseInt(response.HIGH, 10),
+      regular: parseInt(response.NORMAL, 10)
+    }))
 
   const pushXlmTx = (tx) => server.submitTransaction(tx)
 

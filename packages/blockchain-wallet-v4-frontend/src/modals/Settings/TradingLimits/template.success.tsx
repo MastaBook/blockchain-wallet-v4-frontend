@@ -1,17 +1,20 @@
-import React, { useCallback } from 'react'
+import React, { useCallback, useEffect } from 'react'
 import { FormattedMessage } from 'react-intl'
-import { path } from 'ramda'
 import styled from 'styled-components'
 
 import { fiatToString } from '@core/exchange/utils'
 import { Button, Icon, Image, Text } from 'blockchain-info-components'
 import { SuccessCartridge } from 'components/Cartridge'
 import { FlyoutWrapper } from 'components/Flyout'
+import { convertBaseToStandard } from 'data/components/exchange/services'
 import { ModalName } from 'data/modals/types'
-import { SettingsItem, SettingsLimit } from 'data/types'
+import { Analytics, SettingsItem, SettingsLimit } from 'data/types'
 
+import { IconsContainer, Title } from '../../components'
 import { Props as OwnProps, SuccessStateType } from '.'
 import { SETTINGS_ITEM_PERIOD, SETTINGS_ITEMS, SETTINGS_ITEMS_ICONS, TIER_TYPES } from './model'
+import Gold from './template.success.gold'
+import Silver from './template.success.silver'
 
 const TextWrapper = styled(Text)`
   a {
@@ -25,18 +28,7 @@ const Wrapper = styled.div`
   display: flex;
   flex-direction: column;
 `
-const Title = styled(Text)`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 7px;
-`
-const IconsContainer = styled.div`
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  width: 100%;
-`
+
 const CloseIconContainer = styled.div`
   display: flex;
   flex-direction: column;
@@ -164,8 +156,8 @@ const upgradeWallet = (tier: TIER_TYPES, showUpgradeModal: () => void) => {
           <FormattedMessage id='copy.upgrade_your_wallet' defaultMessage='Upgrade Your Wallet' />
         ) : (
           <FormattedMessage
-            id='modals.tradinglimits.upgrade.tier.silver.title'
-            defaultMessage='Upgrade to Gold Limits'
+            id='modals.tradinglimits.upgrade.tier.full_access.title'
+            defaultMessage='Upgrade to Full Access'
           />
         )}
       </TierTitle>
@@ -242,12 +234,13 @@ const renderPeriod = (period: SETTINGS_ITEM_PERIOD) => {
 
 const renderLimit = (limit: SettingsLimit) => {
   const { currency, value } = limit.value
+
   return (
     <LimitStatus>
       {fiatToString({
         digits: 0,
         unit: currency,
-        value
+        value: convertBaseToStandard('FIAT', value)
       })}
       {` `}
       {renderPeriod(limit.period as SETTINGS_ITEM_PERIOD)}
@@ -325,7 +318,17 @@ const renderStatus = (limit: SettingsItem) => {
 }
 
 const Template: React.FC<Props> = (props) => {
-  const { limitsAndDetails, modalActions, sddEligible, userData, userTiers } = props
+  const { analyticsActions, limitsAndDetails, modalActions, userData, userTiers } = props
+  const userCurrentTier = userData?.tiers?.current ?? 0
+  useEffect(() => {
+    analyticsActions.trackEvent({
+      key: Analytics.ONBOARDING_TRADING_LIMITS_VIEWED,
+      properties: {
+        tier: userCurrentTier
+      }
+    })
+  }, [])
+
   const showUpgradeModal = useCallback(() => {
     modalActions.showModal(ModalName.UPGRADE_NOW_MODAL, {
       origin: 'TradingLimits'
@@ -336,17 +339,19 @@ const Template: React.FC<Props> = (props) => {
     return null
   }
 
-  const userCurrentTier = (path(['tiers', 'current'], userData) as number) ?? 0
-  const sddCheckTier =
-    sddEligible && sddEligible.tier === TIER_TYPES.SILVER_PLUS
-      ? TIER_TYPES.SILVER_PLUS
-      : userCurrentTier
-  const currentTier: number | undefined =
-    userCurrentTier === TIER_TYPES.NONE ? userCurrentTier : sddCheckTier
-  const isUserTierZero = currentTier === TIER_TYPES.NONE
-  const isUserGold = currentTier === TIER_TYPES.GOLD
+  const isUserTierZero = userCurrentTier === TIER_TYPES.NONE
+  const isUserGold = userCurrentTier === TIER_TYPES.GOLD
   const isUserTierSilver =
-    currentTier === TIER_TYPES.SILVER || currentTier === TIER_TYPES.SILVER_PLUS
+    userCurrentTier === TIER_TYPES.SILVER || userCurrentTier === TIER_TYPES.SILVER_PLUS
+
+  // show silver/silver+ settings
+  if (isUserTierSilver || isUserTierZero) {
+    return <Silver {...props} />
+  }
+  // show gold settings
+  if (isUserGold) {
+    return <Gold {...props} />
+  }
 
   return (
     <Wrapper>
@@ -365,7 +370,7 @@ const Template: React.FC<Props> = (props) => {
             />
           </CloseIconContainer>
         </IconsContainer>
-        <Title color='textBlack' size='24px' weight={600} style={{ marginTop: '18px' }}>
+        <Title color='textBlack' style={{ marginTop: '18px' }}>
           <FormattedMessage
             id='modals.limits_and_features.title'
             defaultMessage='Limits & Features'
@@ -380,13 +385,13 @@ const Template: React.FC<Props> = (props) => {
           {isUserTierZero && (
             <FormattedMessage
               id='modals.tradinglimits.upgrade.unlock_tier_zero'
-              defaultMessage='Unlock new trading features in your Blockchain.com Wallet by verifying your ID and link a bank or card.'
+              defaultMessage='Unlock new trading features in your Blockchain.com Account by verifying your ID and link a bank or card.'
             />
           )}
           {isUserTierSilver && (
             <FormattedMessage
               id='modals.limits_and_features.subtitle.silver'
-              defaultMessage='Unlock new trading features in your Blockchain.com Wallet by verifying your ID and linked a bank or card.'
+              defaultMessage='Unlock new trading features in your Blockchain.com Account by verifying your ID and linked a bank or card.'
             />
           )}
           {isUserGold && (
@@ -399,7 +404,7 @@ const Template: React.FC<Props> = (props) => {
       </HeaderWrapper>
 
       <MainContent>
-        {upgradeWallet(currentTier, showUpgradeModal)}
+        {upgradeWallet(userCurrentTier, showUpgradeModal)}
 
         <HeadlineWrapper>
           <Headline>
@@ -417,8 +422,8 @@ const Template: React.FC<Props> = (props) => {
               <ItemTitleWrapper>
                 <ItemTitle>
                   <FormattedMessage
-                    id='modals.tradinglimits.upgrade.silver_limits'
-                    defaultMessage='Silver Limits'
+                    id='modals.tradinglimits.upgrade.limited_access_limits'
+                    defaultMessage='Limited Access Limits'
                   />
                 </ItemTitle>
               </ItemTitleWrapper>
@@ -438,8 +443,8 @@ const Template: React.FC<Props> = (props) => {
               <ItemTitleWrapper>
                 <ItemTitle>
                   <FormattedMessage
-                    id='modals.tradinglimits.upgrade.gold_limits'
-                    defaultMessage='Gold Limits'
+                    id='modals.tradinglimits.upgrade.full_access_limits'
+                    defaultMessage='Full Access Limits'
                   />
                 </ItemTitle>
                 <ItemSubtitle>

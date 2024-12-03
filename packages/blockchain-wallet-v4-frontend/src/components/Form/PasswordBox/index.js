@@ -1,8 +1,8 @@
-import React from 'react'
+import React, { useState } from 'react'
 import PropTypes from 'prop-types'
 import styled from 'styled-components'
 
-import { Icon, PasswordGauge, PasswordInput, Text } from 'blockchain-info-components'
+import { PasswordInput, Text } from 'blockchain-info-components'
 
 const Container = styled.div`
   position: relative;
@@ -12,7 +12,6 @@ const Container = styled.div`
   align-items: flex-start;
   width: 100%;
 `
-
 const PasswordContainer = styled.div`
   border-radius: 8px;
   overflow: hidden;
@@ -26,18 +25,12 @@ const Error = styled(Text)`
   right: 0;
 `
 
-const WarningIcon = styled(Icon)`
-  position: absolute;
-  margin: auto 0;
-  right: 16px;
-  top: 14px;
-`
-
 const getErrorState = ({ invalid, touched }) => {
   return touched && invalid ? 'invalid' : 'initial'
 }
 
 const PasswordBox = (field) => {
+  const [isPasswordVisible, setPasswordVisible] = useState(false)
   const {
     autoFocus,
     borderColor,
@@ -45,35 +38,34 @@ const PasswordBox = (field) => {
     input,
     meta,
     noLastPass,
-    passwordScore,
-    showPasswordScore
+    placeholder,
+    showVisibilityToggle
   } = field
   const { active, error, touched } = meta
   const errorState = getErrorState(meta)
-  const scoreVisible = showPasswordScore ? input.value.length > 0 : false
 
   return (
     <Container>
       <PasswordContainer>
         <PasswordInput
           {...input}
-          autoFocus={autoFocus}
-          disabled={disabled}
           active={active}
+          autoFocus={autoFocus}
           controlledBorderColor={borderColor}
-          errorState={errorState}
           data-e2e={field['data-e2e']}
+          disabled={disabled}
+          errorState={errorState}
+          isPasswordVisible={isPasswordVisible}
           noLastPass={noLastPass}
+          placeholder={placeholder}
+          setPasswordVisible={setPasswordVisible}
+          showVisibilityToggle={showVisibilityToggle}
         />
-        {scoreVisible && <PasswordGauge score={passwordScore + 1} />}
       </PasswordContainer>
       {touched && error && (
-        <>
-          <Error size='12px' weight={500} color='error' data-e2e='passwordsNotMatchError'>
-            {error}
-          </Error>
-          {noLastPass && <WarningIcon name='alert-filled' color='red600' size='20px' />}
-        </>
+        <Error size='12px' weight={500} color='error' data-e2e='passwordsNotMatchError'>
+          {error}
+        </Error>
       )}
     </Container>
   )

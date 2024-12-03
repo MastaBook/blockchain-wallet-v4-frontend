@@ -191,11 +191,17 @@ const SelectInput = (props) => {
     height = '48px',
     hideFocusedControl,
     hideIndicator,
+    hideValue,
+    inputValue,
+    isLoading,
+    isMulti = false,
     items,
     menuIsOpen,
     menuPlacement,
+    noOptionsMessage,
     onBlur,
     onFocus,
+    onInputChange,
     onKeyDown,
     openMenuOnClick = true,
     openMenuOnFocus,
@@ -205,13 +211,15 @@ const SelectInput = (props) => {
   } = props
   const options = grouped ? items : items.map((item) => ({ label: item.text, value: item.value }))
   const groupedOptions = grouped && flatten(options.map((o) => o.options))
-  const defaultValue = grouped
+  const defaultValue = isMulti
+    ? defaultItem // for multi we just return as we get
+    : grouped
     ? head(filter((x) => equals(x.value, defaultItem), groupedOptions))
     : head(filter((x) => equals(x.value, defaultItem), options))
 
   return (
     // @ts-ignore
-    <NonceProvider nonce={window.NONCE}>
+    <NonceProvider nonce={window.nonce}>
       <StyledSelect
         borderColor={selectBorderColor(errorState)}
         className={className}
@@ -223,13 +231,16 @@ const SelectInput = (props) => {
           Option,
           ValueContainer
         }}
+        noOptionsMessage={noOptionsMessage}
         focusedBorderColor={selectFocusBorderColor(errorState)}
         filterOption={filterOption}
         height={height}
         hideFocusedControl={hideFocusedControl}
         hideIndicator={hideIndicator}
         isDisabled={disabled}
+        isLoading={isLoading}
         isSearchable={searchEnabled}
+        inputValue={inputValue}
         menuIsOpen={menuIsOpen}
         menuPlacement={menuPlacement}
         onBlur={onBlur}
@@ -237,13 +248,15 @@ const SelectInput = (props) => {
         onFocus={onFocus}
         onKeyDown={onKeyDown}
         openMenuOnClick={openMenuOnClick}
+        onInputChange={onInputChange}
         openMenuOnFocus={openMenuOnFocus}
         options={options}
         placeholder={defaultDisplay}
         ref={getRef}
         templateDisplay={templateDisplay}
         templateItem={templateItem}
-        value={defaultValue}
+        value={hideValue ? null : defaultValue}
+        isMulti={isMulti}
       />
     </NonceProvider>
   )

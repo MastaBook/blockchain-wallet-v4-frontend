@@ -3,9 +3,10 @@ import { connect, ConnectedProps } from 'react-redux'
 import { bindActionCreators, Dispatch } from 'redux'
 
 import { Remote } from '@core'
-import { BSOrderActionType, BSOrderType, BSPairType, FiatType, RemoteDataType } from '@core/types'
-import { FlyoutOopsError } from 'components/Flyout'
+import { BSOrderActionType, BSPairType, FiatType, RemoteDataType } from '@core/types'
+import { FlyoutOopsError } from 'components/Flyout/Errors'
 import { actions, selectors } from 'data'
+import { getEnterAmountStepType } from 'data/components/buySell/utils'
 import { RootState } from 'data/rootReducer'
 
 import Loading from '../template.loading'
@@ -27,7 +28,7 @@ class PaymentMethods extends PureComponent<Props> {
       cryptoCurrency: 'BTC',
       fiatCurrency: this.props.fiatCurrency || 'USD',
       pair: this.props.pair,
-      step: 'ENTER_AMOUNT'
+      step: getEnterAmountStepType(this.props.orderType)
     })
   }
 
@@ -62,7 +63,6 @@ const connector = connect(mapStateToProps, mapDispatchToProps)
 
 export type OwnProps = {
   handleClose: () => void
-  order: BSOrderType
   orderType: BSOrderActionType
   pair: BSPairType
 }

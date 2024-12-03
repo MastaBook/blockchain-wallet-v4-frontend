@@ -1,142 +1,67 @@
 import React, { PureComponent } from 'react'
 import { FormattedMessage } from 'react-intl'
 import { connect, ConnectedProps } from 'react-redux'
+import BigNumber from 'bignumber.js'
 import { bindActionCreators, compose, Dispatch } from 'redux'
-import { Form, InjectedFormProps, reduxForm } from 'redux-form'
-import styled from 'styled-components'
+import { clearSubmitErrors, InjectedFormProps, reduxForm } from 'redux-form'
 
 import { Exchange } from '@core'
 import { coinToString, formatFiat } from '@core/exchange/utils'
-import { BSOrderActionType, BSPairType, CoinType, PaymentValue, RatesType } from '@core/types'
 import {
-  Button,
-  HeartbeatLoader,
-  Icon,
-  Link,
-  SkeletonRectangle,
-  Text,
-  TextGroup
-} from 'blockchain-info-components'
+  BSOrderActionType,
+  BSPairType,
+  CoinfigType,
+  CoinType,
+  PaymentValue,
+  RatesType
+} from '@core/types'
+import { Icon, Link, SkeletonRectangle, Text, TextGroup } from 'blockchain-info-components'
 import { ErrorCartridge } from 'components/Cartridge'
-import { FlyoutWrapper, Row, Value } from 'components/Flyout'
+import { FlyoutWrapper, Value } from 'components/Flyout'
+import { GenericNabuErrorFlyout } from 'components/GenericNabuErrorFlyout'
 import { actions, model, selectors } from 'data'
 import { getFiatFromPair } from 'data/components/buySell/model'
 import { convertBaseToStandard } from 'data/components/exchange/services'
 import { getInputFromPair, getOutputFromPair } from 'data/components/swap/model'
 import { RootState } from 'data/rootReducer'
-import { BSCheckoutFormValuesType, SwapAccountType, SwapBaseCounterTypes } from 'data/types'
+import {
+  Analytics,
+  BSCheckoutFormValuesType,
+  SwapAccountType,
+  SwapBaseCounterTypes
+} from 'data/types'
+import { isNabuError } from 'services/errors'
 
+import { QuoteCountDown } from '../../components/QuoteCountDown'
+import { COINS_WITH_CUSTOM_FEE, SOL_FEE, STX_FEE } from '../../constants'
 import { Border, TopText } from '../../Swap/components'
+import { ErrorCodeMappings } from '../model'
 import Loading from '../template.loading'
+import {
+  AdditionalText,
+  Amount,
+  Bottom,
+  BottomActions,
+  CustomForm,
+  DisclaimerText,
+  IconWrapper,
+  QuoteCountDownWrapper,
+  RowIcon,
+  RowItem,
+  RowItemContainer,
+  RowText,
+  RowTextWrapper,
+  ToolTipText,
+  TopRow
+} from './PreviewSell.styles'
+import { SellButton } from './SellButton'
 
 const { FORM_BS_CHECKOUT, FORM_BS_PREVIEW_SELL } = model.components.buySell
 
-const CustomForm = styled(Form)`
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-`
-
-const RowItem = styled(Row)`
-  display: flex;
-  justify-content: space-between;
-`
-const TopRow = styled.div`
-  display: flex;
-  justify-content: space-between;
-`
-
-const RowIcon = styled.div`
-  display: flex;
-`
-
-const RowItemContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-`
-const RowTextWrapper = styled.div`
-  text-align: right;
-`
-const RowText = styled(Text)`
-  font-size: 16px;
-  font-weight: 500;
-  color: ${(props) => props.theme.grey900};
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-`
-const AdditionalText = styled(Text)`
-  font-weight: 500;
-  color: ${(props) => props.theme.grey400};
-  text-align: right;
-  font-size: 14px;
-`
-const ToolTipText = styled.div`
-  display: flex;
-  border-radius: 8px;
-  margin-top: 8px;
-  padding: 16px;
-  background-color: ${(props) => props.theme.grey000};
-
-  animation: fadeIn 0.3s ease-in-out;
-  @keyframes fadeIn {
-    0% {
-      opacity: 0;
-    }
-    100% {
-      opacity: 1;
-    }
-  }
-`
-const IconWrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  cursor: pointer;
-  margin-left: 4px;
-`
-
-const Amount = styled.div`
-  display: flex;
-  flex-direction: column;
-  margin-top: 40px;
-  > div {
-    display: flex;
-    flex-direction: row;
-  }
-`
-const Bottom = styled(FlyoutWrapper)`
-  display: flex;
-  flex-direction: column;
-  padding-top: 30px;
-  height: 100%;
-`
-
-const BottomActions = styled.div`
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  flex: 1;
-`
-
-const DisclaimerText = styled(Text)`
-  display: flex;
-  font-size: 14px;
-  font-weight: 500;
-  margin-top: 24px;
-  text-align: left;
-  a {
-    color: ${(props) => props.theme.blue600};
-    cursor: pointer;
-    text-decoration: none;
-    display: contents;
-  }
-`
-
 const getNetworkValue = (value: PaymentValue) =>
-  value.coin === 'BTC' || value.coin === 'BCH' ? value.selection?.fee : value.fee
+  value.coin === COINS_WITH_CUSTOM_FEE.BTC || value.coin === COINS_WITH_CUSTOM_FEE.BCH
+    ? value.selection?.fee
+    : value.fee
 
 class PreviewSell extends PureComponent<
   InjectedFormProps<{ destroyOnUnmount: boolean; form: string }, Props> & Props,
@@ -147,12 +72,52 @@ class PreviewSell extends PureComponent<
     this.state = { isSetCoinToolTip: false, isSetNetworkFee: false }
   }
 
-  handleSubmit = (e) => {
-    e.preventDefault()
-    this.props.buySellActions.createOrder({})
+  componentDidMount() {
+    this.props.analyticsActions.trackEvent({
+      key: Analytics.SELL_CHECKOUT_VIEWED,
+      properties: {}
+    })
   }
 
-  networkFee = (value: PaymentValue | undefined) => (value ? getNetworkValue(value) : 0)
+  handleSubmit = (e) => {
+    e.preventDefault()
+
+    this.props.analyticsActions.trackEvent({
+      key: Analytics.SELL_CHECKOUT_SCREEN_SUBMITTED,
+      properties: {}
+    })
+
+    this.props.buySellActions.createSellOrder()
+  }
+
+  handleOnClickBack = (BASE: string) => {
+    this.props.analyticsActions.trackEvent({
+      key: Analytics.SELL_CHECKOUT_SCREEN_BACK_CLICKED,
+      properties: {}
+    })
+
+    this.props.buySellActions.setStep({
+      cryptoCurrency: BASE,
+      fiatCurrency: getFiatFromPair(this.props.pair.pair),
+      orderType: this.props.orderType,
+      pair: this.props.pair,
+      step: 'SELL_ENTER_AMOUNT',
+      swapAccount: this.props.account
+    })
+  }
+
+  networkFee = (value: PaymentValue | undefined, account: SwapAccountType | undefined) => {
+    if (account?.type === SwapBaseCounterTypes.ACCOUNT) {
+      if (account?.coin === COINS_WITH_CUSTOM_FEE.STX) {
+        return STX_FEE
+      }
+
+      if (account?.coin === COINS_WITH_CUSTOM_FEE.SOL) {
+        return SOL_FEE
+      }
+    }
+    return value ? getNetworkValue(value) : 0
+  }
 
   displayAmount = (formValues, account) => {
     return coinToString({
@@ -160,6 +125,19 @@ class PreviewSell extends PureComponent<
         symbol: account.coin
       },
       value: formValues?.cryptoAmount
+    })
+  }
+
+  displayTotalAmount = (formValues, account, payment) => {
+    return coinToString({
+      unit: {
+        symbol: account.coin
+      },
+      value: new BigNumber(formValues?.cryptoAmount).plus(
+        new BigNumber(
+          convertBaseToStandard(account.baseCoin, this.networkFee(payment, account))
+        ).toString()
+      )
     })
   }
 
@@ -174,7 +152,7 @@ class PreviewSell extends PureComponent<
             currency: COUNTER,
             isStandard: true,
             rates: isErc20 ? ratesEth : rates,
-            value: convertBaseToStandard(account.baseCoin, this.networkFee(payment))
+            value: convertBaseToStandard(account.baseCoin, this.networkFee(payment, account))
           })
         )) ||
       0
@@ -182,34 +160,65 @@ class PreviewSell extends PureComponent<
   }
 
   toggleCoinToolTip = () => {
+    this.props.analyticsActions.trackEvent({
+      key: Analytics.SELL_PRICE_TOOLTIP_CLICKED,
+      properties: {}
+    })
+
     this.setState((prevState) => ({
       isSetCoinToolTip: !prevState.isSetCoinToolTip
     }))
   }
 
   toggleNetworkFeeToolTip = () => {
+    this.props.analyticsActions.trackEvent({
+      key: Analytics.SELL_CHECKOUT_NETWORK_FEES_CLICKED,
+      properties: {}
+    })
+
     this.setState((prevState) => ({
       isSetNetworkFee: !prevState.isSetNetworkFee
     }))
   }
 
+  showFiatTransformAlert = (coinfig: CoinfigType) => {
+    const { showFiatEntityRemediationAlert, userLegalEntity } = this.props
+    if (!showFiatEntityRemediationAlert || coinfig.type.name !== 'FIAT') return false
+
+    // Non BC_US with USD balance
+    const NON_BC_US_WITH_USD = userLegalEntity !== 'BC_US' && coinfig.displaySymbol === 'USD'
+    // Non BC_LT/BC_LT_2 with EUR/GBP balance
+    const ANY_BC_LT_WITH_EUR_GBP =
+      !userLegalEntity?.includes('BC_LT') && ['EUR', 'GBP'].includes(coinfig.displaySymbol)
+
+    return NON_BC_US_WITH_USD || ANY_BC_LT_WITH_EUR_GBP
+  }
+
   render() {
-    return this.props.quoteR.cata({
+    const { clearErrors, error, quoteR } = this.props
+
+    if (isNabuError(error)) {
+      return <GenericNabuErrorFlyout error={error} onDismiss={clearErrors} />
+    }
+
+    return quoteR.cata({
       Failure: () => null,
       Loading: () => <Loading />,
-      NotAsked: () => null,
+      NotAsked: () => <Loading />,
       Success: (val) => {
-        const { account, formValues } = this.props
-        if (!formValues) return null
-        if (!account) return null
-        const BASE = getInputFromPair(val.quote.pair)
-        const COUNTER = getOutputFromPair(val.quote.pair)
+        const { account, formValues, pair, payment } = this.props
+        if (!formValues || !account) return null
+
+        const BASE = getInputFromPair(pair.pair)
+        const COUNTER = getOutputFromPair(pair.pair)
         const feeInFiat = this.getFeeInFiat(account, BASE, COUNTER)
         const counterCoinTicker = COUNTER
         const baseCoinTicker = BASE
-        const { rates, ratesEth } = this.props
-        const fiatCurrency = getFiatFromPair(this.props.pair.pair)
-        const isErc20 = window.coins[COUNTER].coinfig.type.erc20Address
+        const { coinfig } = window.coins[counterCoinTicker]
+        const isErc20 = coinfig.type.erc20Address
+        const incomingCoinName = coinfig.name ?? counterCoinTicker
+
+        const showConversionDisclaimer = this.showFiatTransformAlert(coinfig)
 
         return (
           <CustomForm onSubmit={this.handleSubmit}>
@@ -222,16 +231,7 @@ class PreviewSell extends PureComponent<
                   cursor
                   size='24px'
                   color='grey600'
-                  onClick={() => {
-                    this.props.buySellActions.setStep({
-                      cryptoCurrency: BASE,
-                      fiatCurrency: getFiatFromPair(this.props.pair.pair),
-                      orderType: this.props.orderType,
-                      pair: this.props.pair,
-                      step: 'ENTER_AMOUNT',
-                      swapAccount: this.props.account
-                    })
-                  }}
+                  onClick={() => this.handleOnClickBack(BASE)}
                 />{' '}
                 <Text size='20px' color='grey900' weight={600} style={{ marginLeft: '24px' }}>
                   <FormattedMessage
@@ -240,6 +240,9 @@ class PreviewSell extends PureComponent<
                   />
                 </Text>
               </TopText>
+              <QuoteCountDownWrapper>
+                <QuoteCountDown date={val.refreshConfig.date} totalMs={val.refreshConfig.totalMs} />
+              </QuoteCountDownWrapper>
               <Amount data-e2e='sbTotalAmount'>
                 <div>
                   <Text size='32px' weight={600} color='grey800'>
@@ -263,7 +266,10 @@ class PreviewSell extends PureComponent<
                         return (
                           <>
                             {counterCoinTicker}
-                            {formatFiat(Number(success.amt) + Number(feeInFiat))}
+                            &nbsp;
+                            {formatFiat(
+                              convertBaseToStandard('FIAT', new BigNumber(success.amt).toString())
+                            )}
                           </>
                         )
                       }
@@ -342,129 +348,76 @@ class PreviewSell extends PureComponent<
               <RowText>
                 <FormattedMessage id='copy.deposit_to' defaultMessage='Deposit To' />
               </RowText>
-              <Value data-e2e='sbIncomingAccount'>
-                {counterCoinTicker} <FormattedMessage id='copy.account' defaultMessage='Account' />
-              </Value>
+              <Value data-e2e='sbIncomingAccount'>{incomingCoinName}</Value>
             </RowItem>
 
             {account.type !== SwapBaseCounterTypes.CUSTODIAL && (
-              <>
-                <RowItem>
-                  <RowText>
-                    <FormattedMessage
-                      id='modals.simplebuy.confirm.sale_amount'
-                      defaultMessage='Sale Amount'
-                    />
-                  </RowText>
-                  <RowText>
-                    <RowTextWrapper>
-                      {this.props.incomingAmountR.cata({
-                        Failure: () => (
-                          <Text size='14px' color='red600'>
+              <RowItem>
+                <RowItemContainer>
+                  <TopRow>
+                    <RowIcon>
+                      <RowText>
+                        <FormattedMessage id='copy.network_fee' defaultMessage='Network Fee' />
+                      </RowText>
+                      <IconWrapper>
+                        <Icon
+                          name='question-in-circle-filled'
+                          size='16px'
+                          color={this.state.isSetNetworkFee ? 'blue600' : 'grey300'}
+                          onClick={() => this.toggleNetworkFeeToolTip()}
+                        />
+                      </IconWrapper>
+                    </RowIcon>
+                    <RowText data-e2e='sbTransactionFee'>
+                      <RowTextWrapper>
+                        {counterCoinTicker}
+                        {formatFiat(feeInFiat)}
+                        <AdditionalText>
+                          {coinToString({
+                            unit: {
+                              symbol: account.baseCoin
+                            },
+                            value: convertBaseToStandard(
+                              account.baseCoin,
+                              this.networkFee(payment, account)
+                            )
+                          })}
+                        </AdditionalText>
+                      </RowTextWrapper>
+                    </RowText>
+                  </TopRow>
+                  {this.state.isSetNetworkFee && (
+                    <ToolTipText>
+                      <Text size='12px' weight={500} color='grey600'>
+                        <TextGroup inline>
+                          <Text size='14px'>
                             <FormattedMessage
-                              id='copy.oops'
-                              defaultMessage='Oops. Something went wrong.'
+                              id='modals.simplebuy.confirm.network_fees'
+                              defaultMessage='Network fees are set by the {coin} network.'
+                              values={{ coin: baseCoinTicker }}
                             />
                           </Text>
-                        ),
-                        Loading: () => <SkeletonRectangle height='18px' width='70px' />,
-                        NotAsked: () => <SkeletonRectangle height='18px' width='70px' />,
-                        Success: (success) => {
-                          const saleAmount = formatFiat(Number(success.amt))
-                          const saleInCoin = Exchange.convertFiatToCoin({
-                            coin: BASE,
-                            currency: fiatCurrency,
-                            rates: window.coins[BASE].coinfig.type.erc20Address ? ratesEth : rates,
-                            value: Number(saleAmount)
-                          })
-                          return (
-                            <>
-                              <Value data-e2e='sbSaleAccount'>
-                                {counterCoinTicker}
-                                {saleAmount}
-                              </Value>
-                              <AdditionalText>
-                                {coinToString({
-                                  unit: {
-                                    symbol: account.baseCoin
-                                  },
-                                  value: saleInCoin
-                                })}
-                              </AdditionalText>
-                            </>
-                          )
-                        }
-                      })}
-                    </RowTextWrapper>
-                  </RowText>
-                </RowItem>
-                <RowItem>
-                  <RowItemContainer>
-                    <TopRow>
-                      <RowIcon>
-                        <RowText>
-                          <FormattedMessage id='copy.network_fee' defaultMessage='Network Fee' />
-                        </RowText>
-                        <IconWrapper>
-                          <Icon
-                            name='question-in-circle-filled'
-                            size='16px'
-                            color={this.state.isSetNetworkFee ? 'blue600' : 'grey300'}
-                            onClick={() => this.toggleNetworkFeeToolTip()}
-                          />
-                        </IconWrapper>
-                      </RowIcon>
-                      <RowText data-e2e='sbTransactionFee'>
-                        <RowTextWrapper>
-                          {counterCoinTicker}
-                          {formatFiat(feeInFiat)}
-                          <AdditionalText>
-                            {coinToString({
-                              unit: {
-                                symbol: account.baseCoin
-                              },
-                              value: convertBaseToStandard(
-                                account.baseCoin,
-                                this.networkFee(this.props.payment)
-                              )
-                            })}
-                          </AdditionalText>
-                        </RowTextWrapper>
-                      </RowText>
-                    </TopRow>
-                    {this.state.isSetNetworkFee && (
-                      <ToolTipText>
-                        <Text size='12px' weight={500} color='grey600'>
-                          <TextGroup inline>
-                            <Text size='14px'>
-                              <FormattedMessage
-                                id='modals.simplebuy.confirm.network_fees'
-                                defaultMessage='Network fees are set by the {coin} network.'
-                                values={{ coin: baseCoinTicker }}
-                              />
-                            </Text>
-                            <Link
-                              href={
-                                isErc20
-                                  ? 'https://support.blockchain.com/hc/en-us/articles/360061258732'
-                                  : 'https://support.blockchain.com/hc/en-us/articles/360061672651'
-                              }
-                              size='14px'
-                              rel='noopener noreferrer'
-                              target='_blank'
-                            >
-                              <FormattedMessage
-                                id='modals.simplebuy.confirm.learn_more_about_fees'
-                                defaultMessage='Learn more about fees'
-                              />
-                            </Link>
-                          </TextGroup>
-                        </Text>
-                      </ToolTipText>
-                    )}
-                  </RowItemContainer>
-                </RowItem>
-              </>
+                          <Link
+                            href={
+                              isErc20
+                                ? 'https://support.blockchain.com/hc/en-us/articles/360061258732'
+                                : 'https://support.blockchain.com/hc/en-us/articles/360061672651'
+                            }
+                            size='14px'
+                            rel='noopener noreferrer'
+                            target='_blank'
+                          >
+                            <FormattedMessage
+                              id='modals.simplebuy.confirm.learn_more_about_fees'
+                              defaultMessage='Learn more about fees'
+                            />
+                          </Link>
+                        </TextGroup>
+                      </Text>
+                    </ToolTipText>
+                  )}
+                </RowItemContainer>
+              </RowItem>
             )}
             <RowItem>
               <RowText>
@@ -489,18 +442,39 @@ class PreviewSell extends PureComponent<
                         return (
                           <>
                             {counterCoinTicker}
-                            {formatFiat(Number(success.amt) + Number(feeInFiat))}
+                            &nbsp;
+                            {formatFiat(
+                              new BigNumber(
+                                convertBaseToStandard('FIAT', new BigNumber(success.amt).toString())
+                              )
+                                .plus(new BigNumber(feeInFiat).toString())
+                                .toString()
+                            )}
                           </>
                         )
                       }
                     })}
                   </Value>
-                  <AdditionalText>{this.displayAmount(formValues, account)}</AdditionalText>
+                  <AdditionalText>
+                    {this.displayTotalAmount(formValues, account, payment)}
+                  </AdditionalText>
                 </RowTextWrapper>
               </RowText>
             </RowItem>
             <Border />
             <FlyoutWrapper>
+              {showConversionDisclaimer && (
+                <DisclaimerText>
+                  <FormattedMessage
+                    id='modals.simplebuy.confirm.conversion_legalese'
+                    defaultMessage='Your {coinName} ({symbol}) balance will be converted to USDC daily at 12:00 am UTC. To avoid any inconvenience , buy crypto or initiate a withdrawal before the specified time.'
+                    values={{
+                      coinName: incomingCoinName,
+                      symbol: COUNTER
+                    }}
+                  />
+                </DisclaimerText>
+              )}
               <DisclaimerText>
                 <FormattedMessage
                   id='modals.simplebuy.confirm.sell_description'
@@ -522,50 +496,10 @@ class PreviewSell extends PureComponent<
             </FlyoutWrapper>
             <Bottom>
               <BottomActions>
-                <Button
-                  nature='primary'
-                  data-e2e='swapBtn'
-                  type='submit'
-                  disabled={this.props.submitting}
-                  fullwidth
-                  height='48px'
-                >
-                  {this.props.submitting ? (
-                    <HeartbeatLoader height='16px' width='16px' color='white' />
-                  ) : (
-                    <Text weight={600} color='white'>
-                      <FormattedMessage
-                        id='buttons.buy_sell_now'
-                        defaultMessage='{orderType} Now'
-                        values={{
-                          orderType: 'Sell'
-                        }}
-                      />
-                    </Text>
-                  )}
-                </Button>
-                <Button
-                  nature='light-red'
-                  data-e2e='swapCancelBtn'
-                  type='button'
-                  disabled={this.props.submitting}
-                  fullwidth
-                  height='48px'
-                  color='red400'
-                  style={{ marginTop: '16px' }}
-                  onClick={() => {
-                    this.props.buySellActions.setStep({
-                      cryptoCurrency: BASE,
-                      fiatCurrency,
-                      orderType: this.props.orderType,
-                      pair: this.props.pair,
-                      step: 'ENTER_AMOUNT',
-                      swapAccount: this.props.account
-                    })
-                  }}
-                >
-                  <FormattedMessage id='buttons.cancel' defaultMessage='Cancel' />
-                </Button>
+                <SellButton
+                  isSubmitting={this.props.submitting}
+                  refreshConfig={val.refreshConfig}
+                />
                 <Text
                   size='12px'
                   weight={500}
@@ -580,7 +514,11 @@ class PreviewSell extends PureComponent<
                 {this.props.error && (
                   <ErrorCartridge style={{ marginTop: '16px' }} data-e2e='checkoutError'>
                     <Icon name='alert-filled' color='red600' style={{ marginRight: '4px' }} />
-                    Error: {this.props.error}
+                    {Number(this.props.error) ? (
+                      <ErrorCodeMappings code={this.props.error} />
+                    ) : (
+                      `Error: ${this.props.error}`
+                    )}
                   </ErrorCartridge>
                 )}
               </BottomActions>
@@ -594,7 +532,6 @@ class PreviewSell extends PureComponent<
 
 const mapStateToProps = (state: RootState) => {
   const coin = selectors.components.buySell.getCryptoCurrency(state) as CoinType
-  const payment = selectors.components.buySell.getPayment(state).getOrElse(undefined)
 
   return {
     account: selectors.components.buySell.getSwapAccount(state),
@@ -602,15 +539,21 @@ const mapStateToProps = (state: RootState) => {
     formValues: selectors.form.getFormValues(FORM_BS_CHECKOUT)(state) as BSCheckoutFormValuesType,
     incomingAmountR: selectors.components.buySell.getIncomingAmount(state),
     pair: selectors.components.buySell.getBSPair(state),
-    payment,
+    payment: selectors.components.buySell.getPayment(state).getOrElse(undefined),
     quoteR: selectors.components.buySell.getSellQuote(state),
     rates: selectors.core.data.misc.getRatesSelector(coin, state).getOrElse({} as RatesType),
-    ratesEth: selectors.core.data.misc.getRatesSelector('ETH', state).getOrElse({} as RatesType)
+    ratesEth: selectors.core.data.misc.getRatesSelector('ETH', state).getOrElse({} as RatesType),
+    showFiatEntityRemediationAlert: selectors.core.walletOptions
+      .getFiatEntityRemediationAlert(state)
+      .getOrElse('false'),
+    userLegalEntity: selectors.modules.profile.getUserLegalEntity(state)
   }
 }
 
 const mapDispatchToProps = (dispatch: Dispatch) => ({
-  buySellActions: bindActionCreators(actions.components.buySell, dispatch)
+  analyticsActions: bindActionCreators(actions.analytics, dispatch),
+  buySellActions: bindActionCreators(actions.components.buySell, dispatch),
+  clearErrors: () => dispatch(clearSubmitErrors(FORM_BS_PREVIEW_SELL))
 })
 
 const connector = connect(mapStateToProps, mapDispatchToProps)

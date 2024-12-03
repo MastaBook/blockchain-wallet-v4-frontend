@@ -26,7 +26,7 @@ class UpgradeNow extends PureComponent<Props, State> {
 
   componentDidMount() {
     this.setState({ show: true })
-    this.props.fetchInterestEDDStatus()
+    this.props.fetchEarnEDDStatus()
   }
 
   handleClose = () => {
@@ -45,16 +45,7 @@ class UpgradeNow extends PureComponent<Props, State> {
         data-e2e='tradingLimitsModal'
       >
         <FlyoutChild>
-          {this.props.data.cata({
-            Failure: (error) => (
-              <Text color='red600' size='14px' weight={400}>
-                {error}
-              </Text>
-            ),
-            Loading: () => <Loading />,
-            NotAsked: () => <Loading />,
-            Success: (val) => <Success {...val} {...this.props} handleClose={this.handleClose} />
-          })}
+          <Success {...this.props.data} {...this.props} handleClose={this.handleClose} />
         </FlyoutChild>
       </Flyout>
     )
@@ -62,8 +53,12 @@ class UpgradeNow extends PureComponent<Props, State> {
 }
 
 const mapDispatchToProps = (dispatch: Dispatch) => ({
-  fetchInterestEDDStatus: () => dispatch(actions.components.interest.fetchEDDStatus()),
-  identityVerificationActions: bindActionCreators(actions.components.identityVerification, dispatch)
+  fetchEarnEDDStatus: () => dispatch(actions.components.interest.fetchEDDStatus()),
+  identityVerificationActions: bindActionCreators(
+    actions.components.identityVerification,
+    dispatch
+  ),
+  modalActions: bindActionCreators(actions.modals, dispatch)
 })
 
 const mapStateToProps = (state: RootState) => ({
@@ -73,11 +68,11 @@ const mapStateToProps = (state: RootState) => ({
 const connector = connect(mapStateToProps, mapDispatchToProps)
 
 const enhance = compose(
-  ModalEnhancer(ModalName.UPGRADE_NOW_MODAL, { transition: duration }),
+  ModalEnhancer(ModalName.UPGRADE_NOW_MODAL, { fixed: true, transition: duration }),
   connector
 )
 
-export type SuccessStateType = ReturnType<typeof getData>['data']
+export type SuccessStateType = ReturnType<typeof getData>
 
 export type Props = OwnProps & ConnectedProps<typeof connector>
 type State = { show: boolean }

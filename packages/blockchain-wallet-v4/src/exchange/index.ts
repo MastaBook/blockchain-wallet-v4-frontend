@@ -2,7 +2,7 @@
 import { BigNumber } from 'bignumber.js'
 import { path, prop } from 'ramda'
 
-import { CoinType, FiatType, RatesType, WalletFiatType } from '@core/types'
+import { CoinType, FiatType, RatesType } from '@core/types'
 
 import Currencies, { FiatCurrenciesType } from './currencies'
 import { formatCoin, getLang } from './utils'
@@ -129,7 +129,7 @@ const displayCoinToCoin = ({
 }): string => {
   const { coinfig } = window.coins[coin]
   const { displaySymbol } = coinfig
-  
+
   if (isFiat) {
     const options = { style: 'currency', currency: coin }
     return new Intl.NumberFormat(getLang(), options).format(Number(value))

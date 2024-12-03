@@ -12,10 +12,11 @@ import {
   SubExchangeAmount,
   Wrapper
 } from 'components/Exchange'
-import { CountdownTimer } from 'components/Form'
+import CountdownTimer from 'components/Form/CountdownTimer'
 
 const ConfirmWrapper = styled(Wrapper)`
   padding: 0;
+  min-width: 100%;
 `
 const SummaryExchangeAmount = styled(ExchangeAmount)`
   justify-content: flex-end;
@@ -51,6 +52,7 @@ const Success = (props) => {
     handleBack,
     handleBitPayInvoiceExpiration,
     handleSubmit,
+    isCustodial,
     payPro,
     submitting,
     toAddress,
@@ -113,7 +115,11 @@ const Success = (props) => {
         </LargeTableRow>
         <LargeTableRow>
           <Text size='16px' weight={500}>
-            <FormattedMessage id='modals.sendbtc.secondstep.fee' defaultMessage='Fee:' />
+            {isCustodial ? (
+              <FormattedMessage id='copy.processing-fee' defaultMessage='Processing Fee:' />
+            ) : (
+              <FormattedMessage id='copy.network-fee' defaultMessage='Network Fee:' />
+            )}
           </Text>
           <ExchangeAmounts>
             <SummaryExchangeAmount>

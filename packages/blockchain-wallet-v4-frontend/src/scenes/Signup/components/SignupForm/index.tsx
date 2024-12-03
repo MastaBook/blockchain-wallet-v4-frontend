@@ -3,31 +3,36 @@ import { FormattedMessage } from 'react-intl'
 import { Field, InjectedFormProps } from 'redux-form'
 import styled from 'styled-components'
 
-import { Banner, Button, HeartbeatLoader, Link, Text, TextGroup } from 'blockchain-info-components'
-import {
-  CheckBox,
-  Form,
-  FormGroup,
-  FormItem,
-  FormLabel,
-  PasswordBox,
-  SelectBox,
-  SelectBoxCountry,
-  SelectBoxUSState,
-  TextBox
-} from 'components/Form'
+import { CountryScope } from '@core/types'
+import { Button, HeartbeatLoader, Text, TextGroup } from 'blockchain-info-components'
+import CheckBox from 'components/Form/CheckBox'
+import Form from 'components/Form/Form'
+import FormError from 'components/Form/FormError'
+import FormGroup from 'components/Form/FormGroup'
+import FormItem from 'components/Form/FormItem'
+import FormLabel from 'components/Form/FormLabel'
+import PasswordBox from 'components/Form/PasswordBox'
+import SelectBox from 'components/Form/SelectBox'
+import TextBox from 'components/Form/TextBox'
 import Terms from 'components/Terms'
-import { isBrowserSupported } from 'services/browser'
+import { CountryType, SignUpGoalDataType, StateType } from 'data/types'
+import { useCountryList, useUSStateList } from 'hooks'
 import {
   required,
+  stringContainsLowercaseLetter,
+  stringContainsNumber,
+  stringContainsSpecialChar,
+  stringContainsUppercaseLetter,
+  stringLengthBetween,
   validEmail,
   validPasswordConfirmation,
   validStrongPassword
 } from 'services/forms'
+import { applyToUpperCase } from 'services/forms/normalizers'
 
+import { SIGNUP_FORM } from '../..'
 import { SubviewProps } from '../../types'
-
-const isSupportedBrowser = isBrowserSupported()
+import ContinueOnPhone from './ContinueOnPhone'
 
 const StyledForm = styled(Form)`
   margin-top: 20px;
@@ -36,12 +41,6 @@ const StyledForm = styled(Form)`
     max-height: 26rem;
     transition: all 0.5s ease;
   }
-`
-const BrowserWarning = styled.div`
-  margin-bottom: 10px;
-`
-const PasswordTip = styled(Text)`
-  margin-top: 4px;
 `
 const FieldWrapper = styled.div`
   margin-top: 0.25rem;
@@ -64,56 +63,113 @@ const FieldWithoutTopRadius = styled(FormItem)<{ setBorder: boolean }>`
     overflow: hidden;
   }
 `
+const PasswordRequirementText = styled(Text)<{ isValid?: boolean }>`
+  font-size: 12px;
+  font-weight: 400;
+  color: ${(props) => (props.isValid ? props.theme.grey800 : props.theme.red600)};
+`
+
+const EmailErrorText = styled(Text)`
+  font-size: 12px;
+  font-weight: 400;
+  margin-top: 4px;
+  margin-left: 2px;
+  color: ${(props) => props.theme.red600};
+`
 
 const validatePasswordConfirmation = validPasswordConfirmation('password')
 
-const SignupForm = (props: InjectedFormProps<{}, SubviewProps> & SubviewProps) => {
+const getCountryElements = (countries: Array<CountryType>) => [
+  {
+    group: '',
+    items: countries.map((country: CountryType) => ({
+      text: country.name,
+      value: country.code
+    }))
+  }
+]
+
+const getStateElements = (states: Array<StateType>) => [
+  {
+    group: '',
+    items: states.map((state: StateType) => ({
+      text: state.name,
+      value: state.code
+    }))
+  }
+]
+
+const SignupForm = (props: Props) => {
   const {
+    bakktRedirectUSStates,
+    formActions,
     formValues,
+    goals,
+    initialValues,
     invalid,
     isFormSubmitting,
+    isReferralEnabled,
+    isValidReferralCode,
     onCountrySelect,
     onSignupSubmit,
-    showState,
-    signupCountryEnabled,
-    userGeoData
+    setShowModal,
+    showState
   } = props
-  const { password = '' } = formValues || {}
-  const passwordScore = window.zxcvbn ? window.zxcvbn(password).score : 0
+
+  // @ts-ignore
+  const lowercaseError = props.registering?.error?.reason === 'email.lowercase'
+
+  const passwordValue = formValues?.password || ''
+  const referralValue = formValues?.referral || ''
+  const isUSStateUnsupported = bakktRedirectUSStates.includes(formValues?.state)
+
+  const showReferralError =
+    referralValue.length > 0 && isValidReferralCode !== undefined && !isValidReferralCode
+
+  const { data: supportedCountries } = useCountryList({ scope: CountryScope.SIGNUP })
+  const { data: supportedUSStates } = useUSStateList()
+  const dataGoal = goals.find((g) => g.name === 'signup')
+  const { email }: SignUpGoalDataType = dataGoal?.data || {}
 
   useEffect(() => {
-    if (userGeoData?.countryCode && signupCountryEnabled) {
-      props.setDefaultCountry(userGeoData.countryCode)
+    if (email) {
+      formActions.change(SIGNUP_FORM, 'email', email)
     }
-  }, [])
+  }, [formActions, email])
+
+  if (!supportedCountries?.countries || !supportedUSStates?.states) {
+    return <></>
+  }
 
   return (
-    <StyledForm override onSubmit={onSignupSubmit}>
-      {!isSupportedBrowser && (
-        <BrowserWarning>
-          <Banner type='warning'>
-            <FormattedMessage
-              defaultMessage='Your browser is not supported. Please update to at least Chrome 45, Firefox 45, Safari 8, IE 11, or Opera '
-              id='scenes.register.browserwarning'
-            />
-          </Banner>
-        </BrowserWarning>
-      )}
+    <StyledForm override onSubmit={onSignupSubmit} initialValues={initialValues}>
       <FormGroup>
         <FormItem>
           <FormLabel htmlFor='email'>
-            <FormattedMessage id='scenes.register.youremail' defaultMessage='Your Email' />
+            <FormattedMessage
+              id='scenes.security.email.verifiedtitle'
+              defaultMessage='Email Address'
+            />
           </FormLabel>
           <Field
             autoFocus
             bgColor='grey000'
             component={TextBox}
             data-e2e='signupEmail'
-            disabled={!isSupportedBrowser}
             name='email'
+            noLastPass
+            placeholder='Enter Email Address'
             validate={[required, validEmail]}
           />
         </FormItem>
+        {lowercaseError && (
+          <EmailErrorText>
+            <FormattedMessage
+              id='scenes.security.email.lowercase'
+              defaultMessage='Please enter your email address using lowercase letters only.'
+            />
+          </EmailErrorText>
+        )}
       </FormGroup>
       <FormGroup>
         <FormItem>
@@ -124,35 +180,60 @@ const SignupForm = (props: InjectedFormProps<{}, SubviewProps> & SubviewProps) =
             bgColor='grey000'
             component={PasswordBox}
             data-e2e='signupPassword'
-            disabled={!isSupportedBrowser}
             name='password'
-            passwordScore={passwordScore}
-            showPasswordScore
+            placeholder='Enter Password'
             validate={[required, validStrongPassword]}
           />
         </FormItem>
-        {password.length > 0 && (
-          <div>
-            <PasswordTip size='12px' weight={400}>
-              {passwordScore <= 1 && (
+        {passwordValue.length > 0 && !!validStrongPassword(passwordValue) && (
+          <div style={{ marginTop: '4px' }}>
+            <TextGroup inline>
+              <PasswordRequirementText isValid>
                 <FormattedMessage
-                  id='formhelper.passwordsuggest.weak'
-                  defaultMessage='Weak. Use at least 8 characters, a mix of letters, numbers and symbols.'
-                />
-              )}
-              {passwordScore >= 2 && passwordScore < 4 && (
+                  id='scenes.register.password.part1'
+                  defaultMessage='Passwords must contain a'
+                />{' '}
+              </PasswordRequirementText>
+              <PasswordRequirementText isValid={stringContainsLowercaseLetter(passwordValue)}>
                 <FormattedMessage
-                  id='formhelper.passwordsuggest.medium'
-                  defaultMessage='Medium. Use at least 8 characters, a mix of letters, numbers and symbols.'
+                  id='scenes.register.password.part2'
+                  defaultMessage='lowercase letter'
                 />
-              )}
-              {passwordScore === 4 && (
+                {', '}
+              </PasswordRequirementText>
+              <PasswordRequirementText isValid={stringContainsUppercaseLetter(passwordValue)}>
                 <FormattedMessage
-                  id='formhelper.passwordsuggest.great'
-                  defaultMessage='Great password.'
+                  id='scenes.register.password.part3'
+                  defaultMessage='uppercase letter'
                 />
-              )}
-            </PasswordTip>
+                {', '}
+              </PasswordRequirementText>
+              <PasswordRequirementText isValid={stringContainsNumber(passwordValue)}>
+                <FormattedMessage id='scenes.register.password.part4' defaultMessage='number' />
+                {', '}
+              </PasswordRequirementText>
+              <PasswordRequirementText isValid={stringContainsSpecialChar(passwordValue)}>
+                <FormattedMessage
+                  id='scenes.register.password.part5'
+                  defaultMessage='special character'
+                />{' '}
+              </PasswordRequirementText>
+              <PasswordRequirementText isValid>
+                <FormattedMessage
+                  id='scenes.register.password.part6'
+                  defaultMessage='and be at least'
+                />
+              </PasswordRequirementText>
+              <PasswordRequirementText isValid={stringLengthBetween(passwordValue, 8, 64)}>
+                <FormattedMessage
+                  id='scenes.register.password.characters'
+                  defaultMessage='8 characters'
+                />{' '}
+              </PasswordRequirementText>
+              <PasswordRequirementText isValid>
+                <FormattedMessage id='copy.long' defaultMessage='long' />.
+              </PasswordRequirementText>
+            </TextGroup>
           </div>
         )}
       </FormGroup>
@@ -168,95 +249,85 @@ const SignupForm = (props: InjectedFormProps<{}, SubviewProps> & SubviewProps) =
             bgColor='grey000'
             component={PasswordBox}
             data-e2e='signupConfirmPassword'
-            disabled={!isSupportedBrowser}
             name='confirmationPassword'
+            placeholder='Re-enter Password'
             validate={[required, validatePasswordConfirmation]}
           />
         </FormItem>
       </FormGroup>
-      {signupCountryEnabled && (
+      <FormGroup>
+        <FieldWithoutBottomRadius setBorder={showState}>
+          <FormLabel htmlFor='country' id='country'>
+            <FormattedMessage
+              defaultMessage='Country of Residence'
+              id='scenes.register.countryofresidence'
+            />
+          </FormLabel>
+          <Field
+            data-e2e='selectCountryDropdown'
+            name='country'
+            validate={required}
+            elements={getCountryElements(supportedCountries.countries)}
+            component={SelectBox}
+            menuPlacement='auto'
+            onChange={onCountrySelect}
+            label='Select Country'
+          />
+        </FieldWithoutBottomRadius>
+        {showState ? (
+          <FieldWithoutTopRadius setBorder={showState}>
+            <Field
+              name='state'
+              elements={getStateElements(supportedUSStates.states)}
+              component={SelectBox}
+              errorBottom
+              validate={[required]}
+              label='Select State'
+            />
+          </FieldWithoutTopRadius>
+        ) : null}
+        {isUSStateUnsupported && (
+          <FormItem>
+            <ContinueOnPhone setShowModal={setShowModal} />
+          </FormItem>
+        )}
+      </FormGroup>
+      {isReferralEnabled && (
         <FormGroup>
-          <FieldWithoutBottomRadius setBorder={showState}>
-            <FormLabel htmlFor='country' id='country'>
+          <FormItem>
+            <FormLabel htmlFor='referral' id='referral'>
               <FormattedMessage
-                defaultMessage='Country of Residence'
-                id='scenes.register.countryofresidence'
+                defaultMessage='Have a referral code?'
+                id='scenes.register.referralcode'
               />
             </FormLabel>
             <Field
-              data-e2e='selectCountryDropdown'
-              name='country'
-              validate={required}
-              component={SelectBoxCountry as ReturnType<typeof SelectBox>}
-              menuPlacement='auto'
-              onChange={onCountrySelect}
-              label={
-                <FormattedMessage
-                  id='scenes.register.select_a_country'
-                  defaultMessage='Select a Country'
-                />
-              }
+              bgColor='grey000'
+              component={TextBox}
+              data-e2e='referral'
+              name='referral'
+              normalize={applyToUpperCase}
+              placeholder='Enter Referral Code'
             />
-          </FieldWithoutBottomRadius>
-          {showState ? (
-            <FieldWithoutTopRadius setBorder={showState}>
-              <Field
-                name='state'
-                component={SelectBoxUSState}
-                errorBottom
-                validate={[required]}
-                normalize={(val) => val && val.code}
-                label={
-                  <FormattedMessage
-                    id='components.selectboxstate.label'
-                    defaultMessage='Select state'
-                  />
-                }
-              />
-            </FieldWithoutTopRadius>
-          ) : null}
+            {showReferralError && (
+              <FormError data-e2e='referralError' style={{ paddingTop: '5px' }}>
+                <FormattedMessage
+                  defaultMessage='Please enter a valid referral code'
+                  id='scenes.register.referralcode.error'
+                />
+              </FormError>
+            )}
+          </FormItem>
         </FormGroup>
       )}
-
       <FormGroup inline>
         <FieldWrapper>
           <Field name='secretPhase' validate={[required]} component={CheckBox} hideErrors />
         </FieldWrapper>
-        <FormLabel>
-          <TextGroup inline>
-            <Text color='grey800' size='12px' weight={500}>
-              <FormattedMessage
-                id='scenes.register.backupphrase1'
-                defaultMessage='I understand that Blockchain.com never stores passwords and therefore cannot recover or reset my password. If I lose access to my wallet, I must use my'
-              />
-            </Text>
-            <Link
-              href='https://support.blockchain.com/hc/en-us/articles/209564506-Make-a-Wallet-Backup'
-              target='_blank'
-              size='12px'
-              weight={500}
-              data-e2e='blockchainTermsLink'
-            >
-              <FormattedMessage
-                id='scenes.securitysettings.basicsecurity.secretrecoveryphrase.title'
-                defaultMessage='Secret Private Key Recovery Phrase'
-              />
-            </Link>
-            <Text color='grey800' size='12px' weight={500}>
-              <FormattedMessage
-                id='scenes.register.backupphrase2'
-                defaultMessage='to access my funds.'
-              />
-            </Text>
-          </TextGroup>
+        <FormLabel style={{ marginTop: '1px' }}>
+          <Terms />
         </FormLabel>
       </FormGroup>
-      <FormGroup>
-        <FormItem>
-          <Terms style={{ textAlign: 'center', width: '397px' }} isCentered />
-        </FormItem>
-      </FormGroup>
-
       <Button
         data-e2e='signupButton'
         disabled={isFormSubmitting || invalid}
@@ -269,15 +340,14 @@ const SignupForm = (props: InjectedFormProps<{}, SubviewProps> & SubviewProps) =
           <HeartbeatLoader height='20px' width='20px' color='white' />
         ) : (
           <Text color='whiteFade900' size='16px' weight={600}>
-            <FormattedMessage
-              id='scenes.public.register.createWallet'
-              defaultMessage='Create Wallet'
-            />
+            <FormattedMessage id='buttons.continue' defaultMessage='Continue' />
           </Text>
         )}
       </Button>
     </StyledForm>
   )
 }
+
+type Props = InjectedFormProps<{}> & SubviewProps & { setShowModal?: (e) => void }
 
 export default SignupForm

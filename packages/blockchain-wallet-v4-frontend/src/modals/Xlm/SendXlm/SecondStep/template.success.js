@@ -15,6 +15,7 @@ import {
 
 const ConfirmWrapper = styled(Wrapper)`
   padding: 0px;
+  min-width: 100%;
 `
 const SummaryExchangeAmount = styled(ExchangeAmount)`
   justify-content: flex-end;
@@ -49,6 +50,7 @@ const Success = (props) => {
     fromAddress,
     handleBack,
     handleSubmit,
+    isCustodial,
     memo,
     memoType,
     submitting,
@@ -114,7 +116,11 @@ const Success = (props) => {
         </LargeTableRow>
         <LargeTableRow>
           <Text size='16px' weight={500}>
-            <FormattedMessage id='modals.sendxlm.secondstep.fee' defaultMessage='Fee:' />
+            {isCustodial ? (
+              <FormattedMessage id='copy.processing-fee' defaultMessage='Processing Fee:' />
+            ) : (
+              <FormattedMessage id='copy.network-fee' defaultMessage='Network Fee:' />
+            )}
           </Text>
           <ExchangeAmounts>
             <SummaryExchangeAmount>

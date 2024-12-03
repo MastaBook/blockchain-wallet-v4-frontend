@@ -15,21 +15,30 @@ const getData = (state) => {
     openBanking: false
   } as InvitationsType)
   const walletCurrencyR = selectors.core.settings.getCurrency(state)
+  const applePayEnabledR = selectors.core.walletOptions.getApplePayAsNewPaymentMethod(state)
+  const googlePayEnabledR = selectors.core.walletOptions.getGooglePayAsNewPaymentMethod(state)
+  const isInternalTesterR = selectors.modules.profile.isInternalTester(state)
 
   return lift(
     (
+      applePayEnabled: Boolean,
       balances: ExtractSuccess<typeof balancesR>,
       bankTransferAccounts: ExtractSuccess<typeof bankTransferAccountsR>,
       cards: ExtractSuccess<typeof cardsR>,
       eligibility: ExtractSuccess<typeof eligibilityR>,
+      googlePayEnabled: ExtractSuccess<typeof googlePayEnabledR>,
+      isInternalTester: ExtractSuccess<typeof isInternalTesterR>,
       pairs: ExtractSuccess<typeof pairsR>,
       paymentMethods: ExtractSuccess<typeof paymentMethodsR>,
       walletCurrency: FiatType
     ) => ({
+      applePayEnabled,
       balances,
       bankTransferAccounts,
       cards,
       eligibility,
+      googlePayEnabled,
+      isInternalTester,
       pairs,
       paymentMethods:
         (!invitations.openBanking && {
@@ -45,10 +54,13 @@ const getData = (state) => {
       walletCurrency
     })
   )(
+    applePayEnabledR,
     balancesR,
     bankTransferAccountsR,
     cardsR,
     eligibilityR,
+    googlePayEnabledR,
+    isInternalTesterR,
     pairsR,
     paymentMethodsR,
     walletCurrencyR
